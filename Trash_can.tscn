@@ -1,0 +1,25 @@
+[gd_scene format=3 uid="uid://ccixpqkdx7m64"]
+
+[ext_resource type="Script" uid="uid://cfvhmo562yt8" path="res://trash_object.gd" id="1_s205c"]
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_tyt5u"]
+top_radius = 0.13085938
+bottom_radius = 0.13085938
+height = 0.6879883
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_b7sbg"]
+size = Vector3(1, 0.7919922, 1)
+
+[node name="Trash_can" type="RigidBody3D" unique_id=154821579]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6955477, 0)
+script = ExtResource("1_s205c")
+item_id = "can"
+weight = 2.0
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1696940935]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1358825, 0)
+mesh = SubResource("CylinderMesh_tyt5u")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1982635450]
+transform = Transform3D(0.23548174, 0, 0, 0, 0.87137264, 0, 0, 0, 0.35057795, 0, 0.15620035, 0)
+shape = SubResource("BoxShape3D_b7sbg")

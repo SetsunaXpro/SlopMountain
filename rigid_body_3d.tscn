@@ -1,0 +1,32 @@
+[gd_scene format=3 uid="uid://btn5dugfmmr32"]
+
+[ext_resource type="Script" uid="uid://cfvhmo562yt8" path="res://trash_object.gd" id="1_mvxmr"]
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_p6leq"]
+top_radius = 0.12646484
+bottom_radius = 0.12646484
+height = 0.47961426
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_b7sbg"]
+
+[sub_resource type="SphereMesh" id="SphereMesh_p6leq"]
+
+[node name="bottle" type="RigidBody3D" unique_id=1866751787]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1842427680]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.03279984, -0.20220023, 0)
+mesh = SubResource("CylinderMesh_p6leq")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1683533613]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.059797585, 0)
+shape = SubResource("BoxShape3D_b7sbg")
+
+[node name="MeshInstance3D2" type="MeshInstance3D" parent="." unique_id=1174504007]
+transform = Transform3D(0.2541577, 0, 0, 0, 0.31025344, 0, 0, 0, 0.25200263, 0.03279984, 0.046631187, 0)
+mesh = SubResource("SphereMesh_p6leq")
+
+[node name="MeshInstance3D3" type="MeshInstance3D" parent="." unique_id=899831710]
+transform = Transform3D(0.1996544, 0, 0, 0, 1.0000001, 0, 0, 0, 0.21789588, 0.03279984, 0.17076105, 0)
+mesh = SubResource("CylinderMesh_p6leq")
+script = ExtResource("1_mvxmr")
+item_id = "bottle"

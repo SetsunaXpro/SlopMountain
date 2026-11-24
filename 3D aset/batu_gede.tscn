@@ -1,0 +1,47 @@
+[gd_scene format=4 uid="uid://60dv81c6shvf"]
+
+[ext_resource type="Texture2D" uid="uid://dvvu8geab2p1o" path="res://3D aset/batu.png" id="1_jhcyl"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_lrrbc"]
+albedo_texture = ExtResource("1_jhcyl")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_iyrv8"]
+resource_name = "batu"
+cull_mode = 2
+shading_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_24lvc"]
+_surfaces = [{
+"aabb": AABB(-4.00164, -1.1776644, -4.343871, 4.319642, 3.4619393, 4.5129642),
+"format": 34896613377,
+"index_count": 90,
+"index_data": PackedByteArray("AAABAAIAAAADAAEAAAAEAAMAAQADAAUAAwAGAAUABAAGAAMAAQAFAAcAAgABAAcABQAGAAgABAAIAAYABwAFAAkABQAIAAkABAAKAAgACQAIAAoABwAJAAsACwAJAAoAAgAHAAsADAAKAAQACwAKAAwADAAEAA0ADQAEAAAACwAMAA4AAgALAA4ADwAMAA0ADQAAAA8ADwAOAAwAAgAPAAAADgAPABAAAgAQAA8AAgAOABAA"),
+"name": "batu",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 17,
+"vertex_data": PackedByteArray("AN8tWa7FAAD959glqEsAAG+KAABolgAA//95yrd8AAApo3PcY/QAAFOhecoAAAAAFc5t/fiHAAD2UwMzpRYAAI9C///lVwAAJwh5yqMvAAA/LZTpftAAAAAAMUXHXgAA1DaneAHuAADhdJV9//8AABQw/EkF3AAAkIZjTOvtAABVXhslINYAAA==")
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_oi83f"]
+resource_name = "asset rill_Icosphere"
+_surfaces = [{
+"aabb": AABB(-4.00164, -1.1776644, -4.343871, 4.319642, 3.4619393, 4.5129642),
+"attribute_data": PackedByteArray("0UWv11x0r9cWXf//iy7//ycor9egHyfmLbr//+iir9dz0a/Xoov//1x0r9e56P//PPKv16T3J+bRRa/XFl1gr1x0r9fooq/XLbpgr3PRr9dcdK/Xootgr+iir9fRRa/Xiy5grxZdYK9z0a/XLbpgr7noYK+W9uXPPPKv1+iir9eii2CvLbpgr1x0r9cWXWCvootgrzzyr9fv+7fepPcn5pb25c///6/XRw4byIsuYK8gIZ7GAABgryAhnsbRRa/XJyiv14suYK/K42KWecXPm9TR9Y+56GCvLbpgr3nFz5u56GCvootgr+Guz5stumCvPI4SjYsuYK9NU22eFl1grxZdYK/gZm2eootgrw=="),
+"format": 34896613399,
+"index_count": 90,
+"index_data": PackedByteArray("AAABAAIAAwAEAAAAAwAFAAQABgAHAAgACQAKAAcACwAIAAwACwAMAA0ADgAPABAAEQASABMAFAAVABYAFwAYABkAGgAbABwAGgAcAB0AGgAdAB4AHwAgACEAIgAjACQAJQAmACcAJgAlACgAJgAoACkAKgArACwAKgAtACsALgAvADAALgAxAC8AMgAzADQAMgA1ADMANgA3ADgAOQA6ADsAOQA8ADoAPQA+AD8AQABBAEIA"),
+"material": SubResource("StandardMaterial3D_iyrv8"),
+"name": "batu",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 67,
+"vertex_data": PackedByteArray("AN8tWa7FWq7959glqEu0wm+KAABolljAb4oAAGiWwa2QhmNM6+32qFVeGyUg1lypb4oAAGiW8OX2UwMzpRYU/AAAMUXHXt7Hb4oAAGiWP/3959glqEvQ9W+KAABoliHLFDD8SQXc/r5VXhslINZ6uwDfLVmuxUq9//95yrd8Sr3959glqEtKvfZTAzOlFtXhJwh5yqMv1eEAADFFx17V4f3n2CWoSy7yU6F5ygAALvL2UwMzpRYu8gDfLVmuxTqnKaNz3GP0Oqf//3nKt3w6pwAAMUXHXqa1Jwh5yqMvOLg/LZTpftBEtNQ2p3gB7uSxFDD8SQXcz7H2UwMzpRYy81OhecoAADLzJwh5yqMvMvP959glqEuh2f//ecq3fKHZU6F5ygAAodkUMPxJBdxDmpCGY0zr7ZSfVV4bJSDWk5jUNqd4Ae7unuF0lX3//7Sp1DaneAHuhZEpo3PcY/SEkeF0lX3//y+RPy2U6X7QxZHhdJV9//8UlQDfLVmuxRyVkIZjTOvt1JQpo3PcY/RKlSmjc9xj9B/Jj0L//+VX6cgVzm39+IdDyz8tlOl+0KTGJwh5yqMv7sOPQv//5Vfuwz8tlOl+0O7DU6F5ygAA8/uPQv//5Vc0+ycIecqjL+35Fc5t/fiH+fwpo3PcY/S5sBXObf34h7mw//95yrd8ubD//3nKt3xS3RXObf34h1LdU6F5ygAAUt3YMUdT3WTmR0dkGk7cKSJUtiZDWtMc31bBPdXwGnBhQjwzFNCwbjJH1HQBPJ4t28mbM8rPxTBXw3uCQh97gkIfe4JCHweTvv4Hk77+B5O+/hV5qBkVeagZFXmoGa6YQRiumEEYrphBGHKRx/GRkz7tzpHf8zGMJ/pvhEv9HYAk/x2AJP8dgCT/X4d9Al+HfQJfh30C8yHmzdMgfdiBIrPI7yB315YfJ+RYtSS3XLUlt8O5VbkUswO29U3KIIFNwyAMUyEhDEuZIBexPaRhsRykSa5/pbK0oKKlqZS9pamUvaWplL1bh3vJh4jCyIOKi8e0hX3Kw8FbMMPBWzDDwVswTLSnEUy0pxFMtKcR")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_24lvc")
+
+[node name="batu gede" type="MeshInstance3D" unique_id=814575888]
+material_override = SubResource("StandardMaterial3D_lrrbc")
+mesh = SubResource("ArrayMesh_oi83f")

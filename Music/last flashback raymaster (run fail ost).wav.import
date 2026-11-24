@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://bcg2q3ntmhxtt"
+path="res://.godot/imported/last flashback raymaster (run fail ost).wav-841e44568d4aa48f17dbb76f196a87cc.sample"
+
+[deps]
+
+source_file="res://Music/last flashback raymaster (run fail ost).wav"
+dest_files=["res://.godot/imported/last flashback raymaster (run fail ost).wav-841e44568d4aa48f17dbb76f196a87cc.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

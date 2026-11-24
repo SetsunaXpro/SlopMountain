@@ -1,0 +1,30 @@
+[gd_scene format=3 uid="uid://c4yt3pkvvacu1"]
+
+[ext_resource type="Script" uid="uid://cfvhmo562yt8" path="res://trash_object.gd" id="1_psudf"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_dsaii"]
+size = Vector3(0.36676025, 0.76942444, 0.46166992)
+
+[sub_resource type="CylinderMesh" id="CylinderMesh_l35ph"]
+top_radius = 0.21972656
+bottom_radius = 0.21972656
+height = 0.6133423
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_p6leq"]
+
+[node name="TrashObject" type="RigidBody3D" unique_id=1225780085]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.30100185, 0)
+script = ExtResource("1_psudf")
+item_id = "plastic"
+weight = 0.5
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1841961868]
+transform = Transform3D(3.1533098, 0, 0, 0, 2.3219914, 0, 0, 0, 2.1652498, -0.050445557, 0.13282317, -0.0028076172)
+shape = SubResource("BoxShape3D_dsaii")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=616943433]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.7017689, 0)
+mesh = SubResource("CylinderMesh_l35ph")
+
+[node name="MeshInstance3D2" type="MeshInstance3D" parent="." unique_id=940508026]
+mesh = SubResource("CapsuleMesh_p6leq")

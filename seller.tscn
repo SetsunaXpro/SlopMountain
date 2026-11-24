@@ -1,0 +1,27 @@
+[gd_scene format=3 uid="uid://nuy0nmbqy0bi"]
+
+[ext_resource type="Script" uid="uid://tdqabjdmunxk" path="res://garbage_seller.gd" id="1_4sra1"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_seller"]
+size = Vector3(3.0, 2.5, 3.0)
+
+[node name="Seller" type="Node3D" unique_id=209253498]
+
+[node name="GarbageSeller" type="Area3D" parent="." unique_id=609370972]
+script = ExtResource("1_4sra1")
+metadata/_custom_type_script = "uid://tdqabjdmunxk"
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="GarbageSeller"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+shape = SubResource("BoxShape3D_seller")
+
+[node name="CSGBox3D" type="CSGBox3D" parent="." unique_id=1323986371]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+
+[node name="CSGBox3D2" type="CSGBox3D" parent="." unique_id=492284385]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.20947266, 0.8317291, 0)
+size = Vector3(0.5810547, 1, 1)
+
+[node name="CSGPolygon3D" type="CSGPolygon3D" parent="." unique_id=985754530]
+transform = Transform3D(0.6522602, 0, 0, 0, 0.9215541, 0, 0, 0, 0.8285258, -0.443399, 0.45407236, 0.41164112)
+polygon = PackedVector2Array(0, 0, -0.024208307, 0.030073047, 0.59951705, 0.94577765, 1, 0)

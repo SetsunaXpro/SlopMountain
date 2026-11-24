@@ -1,0 +1,125 @@
+[gd_scene format=3 uid="uid://b2tvilytyr4du"]
+
+[sub_resource type="PrismMesh" id="PrismMesh_p6leq"]
+
+[node name="CSGBox3D" type="CSGBox3D" unique_id=1649982183]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.2075195, 2.6622906, -7.45874)
+size = Vector3(11.415039, 5.314392, 15.91748)
+
+[node name="CSGBox3D2" type="CSGBox3D" parent="." unique_id=1199927616]
+transform = Transform3D(0.9965884, 0, -7.922311e-23, -1.792292e-27, 0.93163365, -5.0448534e-13, 3.5527137e-15, 5.0448534e-13, 0.94856733, 0.002916336, 0.06777811, 0.017427921)
+operation = 2
+size = Vector3(11.210449, 5.4130554, 15.91748)
+
+[node name="CSGCylinder3D16" type="CSGCylinder3D" parent="." unique_id=1168838602]
+transform = Transform3D(1.0715255, 0, 0, 0, -4.3711392e-08, -1, 0, 1, -4.3711392e-08, 5.9964876, -1.0878733, 0.105041504)
+height = 16.17395
+
+[node name="CSGCylinder3D15" type="CSGCylinder3D" parent="." unique_id=1361084998]
+transform = Transform3D(1.0715256, 0, 0, 0, -4.3711392e-08, -1, 0, 1, -4.3711392e-08, 5.9964876, 1.940959, 0.105041504)
+height = 16.17395
+
+[node name="CSGCylinder3D14" type="CSGCylinder3D" parent="." unique_id=1120017758]
+transform = Transform3D(1.0715256, 0, 0, 0, -4.3711392e-08, -1, 0, 1, -4.3711392e-08, 5.9964876, 0.9460213, 0.105041504)
+height = 16.17395
+
+[node name="CSGCylinder3D13" type="CSGCylinder3D" parent="." unique_id=1571172317]
+transform = Transform3D(1.0715256, 0, 0, 0, -4.3711395e-08, -1, 0, 1, -4.3711395e-08, 5.9964876, -0.06569004, 0.105041504)
+height = 16.17395
+
+[node name="CSGCylinder3D12" type="CSGCylinder3D" parent="." unique_id=492944472]
+transform = Transform3D(1.0715256, 0, 0, 0, -4.3711392e-08, -1, 0, 1, -4.3711392e-08, 5.9964876, -2.1106317, 0.105041504)
+height = 16.17395
+
+[node name="CSGCylinder3D6" type="CSGCylinder3D" parent="." unique_id=830815466]
+transform = Transform3D(-4.371138e-08, 0.8298905, -4.37114e-08, 3.552714e-15, -3.627567e-08, -1, -0.9999999, -3.6275672e-08, -4.0612286e-15, 0.03625059, -1.2734122, -7.777053)
+height = 16.521057
+
+[node name="CSGCylinder3D11" type="CSGCylinder3D" parent="." unique_id=1240616780]
+transform = Transform3D(-4.371138e-08, 0.8298905, -4.37114e-08, 3.552714e-15, -3.627567e-08, -1, -0.9999999, -3.6275672e-08, -4.0612286e-15, 0.03625059, 2.5654573, -7.807885)
+height = 16.521057
+
+[node name="CSGCylinder3D10" type="CSGCylinder3D" parent="." unique_id=552143513]
+transform = Transform3D(-4.371138e-08, 0.8298905, -4.37114e-08, 3.552714e-15, -3.627567e-08, -1, -0.9999999, -3.6275672e-08, -4.0612286e-15, 0.036251068, 1.601335, -7.807885)
+height = 16.521057
+
+[node name="CSGCylinder3D9" type="CSGCylinder3D" parent="." unique_id=457735050]
+transform = Transform3D(-4.371138e-08, 0.8298905, -4.37114e-08, 3.552714e-15, -3.627567e-08, -1, -0.9999999, -3.6275672e-08, -4.0612286e-15, 0.036251068, 0.63846064, -7.777053)
+height = 16.521057
+
+[node name="CSGCylinder3D8" type="CSGCylinder3D" parent="." unique_id=398706626]
+transform = Transform3D(-4.3711385e-08, 0.8298905, -4.371139e-08, 3.5527145e-15, -3.627566e-08, -0.99999994, -0.9999999, -3.6275672e-08, -4.0612286e-15, 0.03625059, -0.4018371, -7.777053)
+height = 16.521057
+
+[node name="CSGCylinder3D7" type="CSGCylinder3D" parent="." unique_id=1732874474]
+transform = Transform3D(-4.371138e-08, 0.8298905, -4.37114e-08, 3.552714e-15, -3.627567e-08, -1, -0.9999999, -3.6275672e-08, -4.0612286e-15, 0.03625059, -2.1488936, -7.807885)
+height = 16.521057
+
+[node name="CSGCylinder3D4" type="CSGCylinder3D" parent="." unique_id=817759827]
+transform = Transform3D(1.0715256, 0, 0, 0, -4.3711392e-08, -1, 0, 1, -4.3711392e-08, -5.990895, 1.940959, 0.105041504)
+height = 16.17395
+
+[node name="CSGCylinder3D2" type="CSGCylinder3D" parent="." unique_id=1370684391]
+transform = Transform3D(1.0715255, 0, 0, 0, -4.3711392e-08, -1, 0, 1, -4.3711392e-08, -5.990895, -1.0878733, 0.105041504)
+height = 16.17395
+
+[node name="CSGCylinder3D5" type="CSGCylinder3D" parent="." unique_id=163648890]
+transform = Transform3D(1.0715256, 0, 0, 0, -4.3711392e-08, -1, 0, 1, -4.3711392e-08, -5.990895, 0.9460213, 0.105041504)
+height = 16.17395
+
+[node name="CSGCylinder3D3" type="CSGCylinder3D" parent="." unique_id=86952245]
+transform = Transform3D(1.0715256, 0, 0, 0, -4.3711395e-08, -1, 0, 1, -4.3711395e-08, -5.990895, -0.06569004, 0.105041504)
+height = 16.17395
+
+[node name="CSGCylinder3D" type="CSGCylinder3D" parent="." unique_id=448826043]
+transform = Transform3D(1.0715256, 0, 0, 0, -4.3711392e-08, -1, 0, 1, -4.3711392e-08, -5.990895, -2.1106317, 0.105041504)
+height = 16.17395
+
+[node name="CSGMesh3D" type="CSGMesh3D" parent="." unique_id=1855281702]
+transform = Transform3D(11.319403, 0, 0, 0, 4.1227875, -5.684342e-14, 0, 1.4210855e-14, 15.66404, -4.7683716e-07, 4.94843, -0.16749382)
+mesh = SubResource("PrismMesh_p6leq")
+
+[node name="CSGCylinder3D14" type="CSGCylinder3D" parent="CSGMesh3D" unique_id=781363521]
+transform = Transform3D(-3.1273577e-09, 0.05937502, -0.051825345, 6.219698e-09, -0.11808525, -0.19643348, -0.057438802, -2.0836093e-09, 0, 0.2661276, -0.012539148, 0.49199325)
+height = 10.538712
+
+[node name="CSGCylinder3D12" type="CSGCylinder3D" parent="CSGMesh3D" unique_id=562197002]
+transform = Transform3D(-3.127357e-09, 0.05937502, -0.05182535, 6.2196985e-09, -0.11808525, -0.1964335, -0.05743881, -2.083609e-09, 1.09747974e-16, 0.26612756, -0.012539148, -0.484528)
+height = 10.538712
+
+[node name="CSGCylinder3D13" type="CSGCylinder3D" parent="CSGMesh3D" unique_id=871553089]
+transform = Transform3D(-2.3945337e-09, -0.05938881, -0.051802408, -1.2433892e-08, -0.118032984, 0.19647911, -0.05743881, 2.479435e-09, -1.472223e-09, -0.24024574, -0.012539148, -0.484528)
+height = 10.538712
+
+[node name="CSGCylinder3D15" type="CSGCylinder3D" parent="CSGMesh3D" unique_id=451249214]
+transform = Transform3D(-2.3945343e-09, -0.059388813, -0.0518024, -1.2433892e-08, -0.11803297, 0.1964791, -0.057438802, 2.479435e-09, -1.4722227e-09, -0.24, -0.013, 0.492)
+height = 10.538712
+
+[node name="CSGCylinder3D22" type="CSGCylinder3D" parent="." unique_id=1716016752]
+transform = Transform3D(-4.371138e-08, 0.8298905, -4.37114e-08, 3.552714e-15, -3.627567e-08, -1, -0.9999999, -3.6275672e-08, -4.0612286e-15, 0.03625059, -1.2734122, 7.617405)
+height = 16.521057
+
+[node name="CSGCylinder3D21" type="CSGCylinder3D" parent="." unique_id=649734027]
+transform = Transform3D(-4.371138e-08, 0.8298905, -4.37114e-08, 3.552714e-15, -3.627567e-08, -1, -0.9999999, -3.6275672e-08, -4.0612286e-15, 0.03625059, 2.5654573, 7.5865726)
+height = 16.521057
+
+[node name="CSGCylinder3D20" type="CSGCylinder3D" parent="." unique_id=202139850]
+transform = Transform3D(-4.371138e-08, 0.8298905, -4.37114e-08, 3.552714e-15, -3.627567e-08, -1, -0.9999999, -3.6275672e-08, -4.0612286e-15, 0.036251068, 1.601335, 7.5865726)
+height = 16.521057
+
+[node name="CSGCylinder3D19" type="CSGCylinder3D" parent="." unique_id=745574665]
+transform = Transform3D(-4.371138e-08, 0.8298905, -4.37114e-08, 3.552714e-15, -3.627567e-08, -1, -0.9999999, -3.6275672e-08, -4.0612286e-15, 0.036251068, 0.63846064, 7.617405)
+height = 16.521057
+
+[node name="CSGCylinder3D18" type="CSGCylinder3D" parent="." unique_id=1122761275]
+transform = Transform3D(-4.3711385e-08, 0.8298905, -4.371139e-08, 3.5527145e-15, -3.627566e-08, -0.99999994, -0.9999999, -3.6275672e-08, -4.0612286e-15, 0.03625059, -0.4018371, 7.617405)
+height = 16.521057
+
+[node name="CSGCylinder3D17" type="CSGCylinder3D" parent="." unique_id=1116969972]
+transform = Transform3D(-4.371138e-08, 0.8298905, -4.37114e-08, 3.552714e-15, -3.627567e-08, -1, -0.9999999, -3.6275672e-08, -4.0612286e-15, 0.03625059, -2.1488936, 7.5865726)
+height = 16.521057
+
+[node name="CSGBox3D" type="CSGBox3D" parent="." unique_id=509000983]
+transform = Transform3D(-4.3711385e-08, 2.4932988, -4.3711395e-08, 3.5526957e-15, -1.0898491e-07, -0.99999994, -0.9999998, -1.08984956e-07, -4.061186e-15, 0.075056076, -0.97493887, 7.566873)
+operation = 2
+size = Vector3(1.7801514, 1.0311279, 3.2710266)

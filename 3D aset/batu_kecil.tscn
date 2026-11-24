@@ -1,0 +1,47 @@
+[gd_scene format=4 uid="uid://b7enyvdrphcy7"]
+
+[ext_resource type="Texture2D" uid="uid://dvvu8geab2p1o" path="res://3D aset/batu.png" id="1_jppqm"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ihbbc"]
+albedo_texture = ExtResource("1_jppqm")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_iyrv8"]
+resource_name = "batu"
+cull_mode = 2
+shading_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_sadb4"]
+_surfaces = [{
+"aabb": AABB(-2.5143855, -2.372818e-08, 1.0793393, 0.80327654, 0.64948726, 0.9729178),
+"format": 34896613377,
+"index_count": 132,
+"index_data": PackedByteArray("AAABAAIAAgABAAMAAgADAAQAAwAFAAQAAgAEAAUAAQAGAAMABQADAAYABQAGAAcABwAIAAUAAgAFAAgABgAJAAcABwAJAAgAAQAKAAYABgAKAAkAAQALAAoAAAALAAEACwAMAAoACgANAAkACgAMAA0ACwAOAAwADgANAAwAAAAPAAsADwAOAAsACQANABAADgAQAA0AEAAOABEADwARAA4ACQAQABIAEgAQABEAEgARAA8ACAAJABIAEwAPAAAAFAASAA8ACAASABQAFAAPABMACAAUABUAAgAIABUAFgAUABMAEwAAABYAFgAVABQAAgAWAAAAFQAWABcAAgAXABYAAgAVABcA"),
+"name": "batu",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 24,
+"vertex_data": PackedByteArray("Vtf1KkThAACM59s0QkkAANl4AACKUQAAaIK8KAAAAAAEYxoZ2hcAAJ45vCiGEwAAUHGfZt4iAAA1SaRtaz4AAAAA2zRghwAAHiUj12BFAABurC7aWjIAAP//KdNghwAA4J3q6oVKAADLSE/9Q2YAAIiy//+ifQAAjKcp0+HrAADLSE/9fagAABWVT/30vAAAchgp033FAACOYz5zJu8AAJ0mPnPN3gAAARQOIovlAACbdg4i//8AAAZKQA/C3gAA")
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_fsu6y"]
+resource_name = "asset rill_Icosphere_001"
+_surfaces = [{
+"aabb": AABB(-2.5143855, -2.372818e-08, 1.0793393, 0.80327654, 0.64948726, 0.9729178),
+"attribute_data": PackedByteArray("0UWv11x0r9cWXf//0UWv1xZdYK9cdK/X0UWv14suYK8WXWCvc9Gv1y26YK+56GCvXHSv1xZdYK+ii2Cvz5qP2omxr9fipSfnB549zzmqPc+ii///z5qP2uKlJ+dcdK/XB549zy26YK85qj3Pootgr1x0r9cHnj3Pz5qP2qKLYK8tuv//ibGv13PRr9fipSfnOao9z3PRr9eJsa/XLbpgryzsr9dG+pjhQPVM6hX2Gs///6/Xuej//yzsr9dA9Uzqc9Gv11wNhcaLLmCvLiGFxgAAYK9z0a/XFfYazyzsr9e56GCviy7//xcrr9fRRa/XBCJM6i4hhcbRRa/XFyuv14suYK/b3Y6cc9ERh2PXWZELxY6cg8tZkQAAYK+tI46ciy5gr90KjpwtumCv292OnLnoYK8LxY6cootgr1CvjpwtumCvgJaOnIsuYK85Uo6cFl1gr2k5jpwWXWCvxICOnKKLYK/0Z46c"),
+"format": 34896613399,
+"index_count": 132,
+"index_data": PackedByteArray("AAABAAIAAwAEAAUABgAHAAgACQAKAAsADAANAA4ADwAQABEAEAAPABIAEAASABMAFAAVABYAFAAXABUAGAAZABoAGAAbABkAHAAdAB4AHAAfAB0AIAAhACIAIAAjACEAJAAlACYAJAAnACUAKAApACoAKQAoACsAKQArACwALQAuAC8ALQAwAC4AMQAyADMAMQA0ADIANQA2ADcANQA4ADYAOQA6ADsAOQA8ADoAPQA+AD8APQBAAD4AQQBCAEMAQgBBAEQAQgBEAEUARgBHAEgARgBJAEcASgBLAEwASgBNAEsATgBPAFAATgBRAE8AUgBTAFQAUgBVAFMAVgBXAFgAVgBZAFcA"),
+"material": SubResource("StandardMaterial3D_iyrv8"),
+"name": "batu",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 90,
+"vertex_data": PackedByteArray("Vtf1KkThpsuM59s0Qkmmy9l4AACKUabLVtf1KkThPL3//ynTYIc8vYzn2zRCSTy9Vtf1KkThZKeMpynT4etkp///KdNgh2SnAADbNGCHucMeJSPXYEW5w3IYKdN9xbnDjOfbNEJJ0Nv//ynTYIfQ226sLtpaMtDbaIK8KAAAF/KeObwohhML8ARjGhnaFw3wUHGfZt4inu81SaRtaz5r7dl4AACKUR7paIK8KAAAdusEYxoZ2hd+84zn2zRCSUrmUHGfZt4iXvMeJSPXYEVt8zVJpG1rPt3ybqwu2loyqfOM59s0Qkn57VBxn2beIt3taIK8KAAAfO1urC7aWjJG7tl4AACKUVfZnjm8KIYTCNoAANs0YIdW2ARjGhnaF9zcNUmkbWs+LtoAANs0YIc92p45vCiGE87ZHiUj12BFzNoBFA4ii+U2l5t2DiL//zecBkpAD8Lel42dJj5zzd6+no5jPnMm76yn2XgAAIpRycsBFA4ii+U7zAZKQA/C3hHNAADbNGCHP8udJj5zzd7rkYynKdPh6+uRjmM+cybv65FyGCnTfcXrkQAA2zRgh9eznSY+c83e1LMBFA4ii+WGtHIYKdN9xTC02XgAAIpRhbybdg4i///cvFbX9SpE4US7BkpAD8Le2MCOYz5zJu8JiVbX9SpE4QyJm3YOIv//v4mMpynT4evoiMtIT/19qNPTiLL//6J9+NIVlU/99Lw3z8tIT/1DZkHX4J3q6oVKxzNyGCnTfcXgqBWVT/30vOCojKcp0+Hr4KjLSE/9fajgqB4lI9dgRVLJy0hP/X2oxclyGCnTfcUBystIT/1DZrjIbqwu2loybvfLSE/9Q2az+R4lI9dgRUf64J3q6oVK/PSMpynT4etEuoiy//+ifXu5//8p02CHybgVlU/99LyhvP//KdNghwzb4J3q6oVKL95urC7aWjLV4Iiy//+ifYPYrFf8SqxX/EqsV/xKr3DdGK9w3RivcN0YE6BAFROgQBUToEAVI4qv6COKr+gjiq/obJBQA2yQUANskFADyHgh33GCdORngnvkj4Qa42OPL9xUcz07wHavOeaCjDc6bxk9qIM78sCC7vKpiwnsIn8n9FNwwwAdj2cA4pF1BB1tuQOKPGHn4zxT6Ac8/eVIPhnsQIFN9TiAxvWeiXXx4ngL7DnQ4PdB2En22l2d/lPbrvVH4xv0cjM31L8zDtVKNJLWEjMq09q60bvautG72rrRu9q60buHi0vy/Yy68jaA6e40nqrsbjCmYpAy0mGIJENn+EHXWyW0wiWFtHslTL5IHnur7Cx5sCCpu7F5qOK3Q6XPq4+rQN1dPXHXs5px17OacdezmnHXs5qSnjDBnZ1owSCdhMHmn+PA4oi1zJSEUM9xg//PUI0HyizO3zCTzgwz+M4sNSnNZytavikc+rt+FhG67RFrwBkh")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_sadb4")
+
+[node name="batu kecil" type="MeshInstance3D" unique_id=1655887926]
+material_override = SubResource("StandardMaterial3D_ihbbc")
+mesh = SubResource("ArrayMesh_fsu6y")

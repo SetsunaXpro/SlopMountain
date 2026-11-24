@@ -1,0 +1,24 @@
+[remap]
+
+importer="wav"
+type="AudioStreamWAV"
+uid="uid://bnhqeg4qroc3p"
+path="res://.godot/imported/f@ct Fun days (music or buy menu ost).wav-6f6cd4bfd90f1f364efe3b1933d5e905.sample"
+
+[deps]
+
+source_file="res://Music/f@ct Fun days (music or buy menu ost).wav"
+dest_files=["res://.godot/imported/f@ct Fun days (music or buy menu ost).wav-6f6cd4bfd90f1f364efe3b1933d5e905.sample"]
+
+[params]
+
+force/8_bit=false
+force/mono=false
+force/max_rate=false
+force/max_rate_hz=44100
+edit/trim=false
+edit/normalize=false
+edit/loop_mode=0
+edit/loop_begin=0
+edit/loop_end=-1
+compress/mode=2

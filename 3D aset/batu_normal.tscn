@@ -1,0 +1,48 @@
+[gd_scene format=4 uid="uid://nvmm1jdkd78t"]
+
+[ext_resource type="Texture2D" uid="uid://dvvu8geab2p1o" path="res://3D aset/batu.png" id="1_f6bfb"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_2fhwj"]
+albedo_texture = ExtResource("1_f6bfb")
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_iyrv8"]
+resource_name = "batu"
+cull_mode = 2
+shading_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_tsv6f"]
+_surfaces = [{
+"aabb": AABB(0.5790884, -0.90313566, 0.46118248, 1.8792274, 2, 2.2965703),
+"format": 34896613377,
+"index_count": 126,
+"index_data": PackedByteArray("AAABAAIAAAADAAEAAQAEAAIAAQAFAAQABAAFAAYAAgAEAAYAAQAHAAUAAwAHAAEABwAGAAUAAgAGAAgAAwAJAAcAAAAKAAMACgAJAAMAAAALAAoAAgALAAAACgAMAAkAAgAIAA0AAgANAAsACAAOAA0ABgAOAAgADQAPAAsADwANAA4ACwAQAAoACwAPABAAEAAMAAoADwAOABEAEQAQAA8ABgASAA4ABwASAAYADgATABEAEAARABMADgASABMAEAATABQADAAQABQAEgAUABMADAAUABUAFQAJAAwAFAASABYAFAAWABUACQAVABYAFgASAAcACQAWAAcA"),
+"name": "batu",
+"primitive": 3,
+"uv_scale": Vector4(0, 0, 0, 0),
+"vertex_count": 23,
+"vertex_data": PackedByteArray("HoIAACSEAAB4XMFG9uIAALHkwUa+vgAARwjBRiSEAAAXeHN2//8AAMhdL7dK8gAAgJEl1APjAAAfC8DcAoMAAJj89oE9rwAAAADlvnplAAB4XMFGUiUAALHkwUaKSQAAbBfwxBZJAAD//2OKq2wAAFHrzdGTXAAA08cam58LAAAbmkaaAAAAAAzU+MqOGAAAHoL//ySEAAAvqU7WkRkAAAR09d6HHgAADC6h6Tg7AAB7Nbr6cWoAAA==")
+}]
+blend_shape_mode = 0
+
+[sub_resource type="ArrayMesh" id="ArrayMesh_uish6"]
+resource_name = "asset rill_Icosphere_002"
+_surfaces = [{
+"aabb": AABB(0.5790884, -0.90313566, 0.46118248, 1.8792274, 2, 2.2965703),
+"attribute_data": PackedByteArray("RZf//6KL1+vootfr6KLX6y261+uKrv//XPT//7no1+v//9frFt3//3PR1+u56Nfr0MX//y261+tz0dfruejX6+7mr9f//9frItns18jgFd7V2yDdyt7v0e7mr9dz0dfryOAV3rno1+vV2yDduejX68jgFd7u5q/Xyt7v0bnoiMPu5q/Xf6fi46O1uNcjsfLh6KLX6yOx8uEtutfrf6fi46mQIeMUjiDavZdL06KL1+sUjiDaqZAh4x13uc8dd7nPvZdL0xSOINqii4jDvZdL06O1uNd/p+Lj6KKIw6KL1+upkCHj6KLX6+ii1+u9l0vTf6fi46mQIeP5v/7Yvsl+3vbBXN7FxXDU3crL2COx8uH2wVzeLbrX66O1uNf5v/7YLbrX677Jft5z0dfr9sFc3r7Jft7V2yDdc9HX693Ky9gi2ezXo7W418XFcNT5v/7YLbqIw3PRiMPdysvYxcVw1Mre79Ei2ezX"),
+"format": 34896613399,
+"index_count": 126,
+"index_data": PackedByteArray("AAABAAIAAwAEAAUABgAHAAgACQAKAAsADAANAA4ADwAQABEAEgATABQAEwASABUAEwAVABYAFwAYABkAFwAaABgAGwAcAB0AHgAfACAAIQAiACMAJAAlACYAJAAnACUAKAApACoAKwAsAC0AKwAuACwALwAwADEALwAyADAAMwA0ADUAMwA2ADQANwA4ADkAOgA7ADwAOgA9ADsAPgA/AEAAPwA+AEEAPwBBAEIAQwBEAEUARABDAEYARABGAEcASABJAEoASABLAEkATABNAE4ATQBMAE8ATQBPAFAAUQBSAFMAUQBUAFIAVQBWAFcAVgBVAFgAVgBYAFkA"),
+"material": SubResource("StandardMaterial3D_iyrv8"),
+"name": "batu",
+"primitive": 3,
+"uv_scale": Vector4(2, 2, 0, 0),
+"vertex_count": 90,
+"vertex_data": PackedByteArray("HoIAACSEZad4XMFG9uJlp7HkwUa+vmWnseTBRr6+Dcix5MFGikkNyB6CAAAkhA3IHoIAACSEnLRHCMFGJISctHhcwUb24py0HoIAACSE2N14XMFGUiXY3UcIwUYkhNjdHoIAACSEiPSx5MFGikmI9HhcwUZSJYj0RwjBRiSEZ6YfC8DcAoNnpnhcwUb24memDC6h6Tg7EtIAAOW+emXB0WwX8MQWSU/RezW6+nFqBdIfC8DcAoN90XhcwUZSJebZAADlvnpl+NlHCMFGJITZ2WwX8MQWSRfaRwjBRiSEfLcAAOW+emV8tx8LwNwCg3y3ezW6+nFqz8wegv//JITPzB8LwNwCg8/MmPz2gT2vgb1R683Rk1yBvf//Y4qrbIG9seTBRr6+qMH//2OKq2yAwbHkwUaKSVLBmPz2gT2vCcIXeHN2///vkchdL7dK8u+RgJEl1APj75F4XMFG9uKuqMhdL7dK8uuoF3hzdv//TakfC8DcAoOKqR8LwNwCg16wgJEl1APjR7DIXS+3SvIosB6C//8khHewgJEl1APjSbdR683Rk1xVt5j89oE9r9K3HoL//ySEvLZ4XMFG9uLynhd4c3b///KeseTBRr6+8p6x5MFGvr77moCRJdQD43OamPz2gT2v9JsXeHN2//8jmgzU+MqOGOf5G5pGmgAA5fzTxxqbnwtY+y+pTtaRGaX9BHT13ocezv3//2OKq2yg0NPHGpufC5jQseTBRopJntBR683Rk1yb0AzU+MqOGJvQseTBRopJy/MbmkaaAADL83hcwUZSJcvz08cam58Ly/MbmkaaAACL6GwX8MQWSYLoeFzBRlIljegEdPXehx6E6Awuoek4O33oUevN0ZNce9wvqU7WkRkD3AzU+MqOGPraHoL//ySE+Nwegv//JITv8QR09d6HHvfzL6lO1pEZfvN7Nbr6cWrc8wwuoek4O/X4bylFZG8pRWRvKUVkLWCkPy1gpD8tYKQ/7DOZzewzmc3sM5nNSkmH7UpJh+1KSYftn3mdLp95nS6feZ0uYIJn/GCCZ/xggmf8JIzg0w6No9NgjkvTSozX09aNb9PjbWD6QG41+6JtzPnVbon8m23i0ptt4tKbbeLSrZSjrK2Uo6ytlKOsGJ3VEhid1RIYndUS7nA8Iv5vSCLUblYiEXMiIrm4g2m5uINpubiDae1yyPj+b+j8YW6v3YaXzf1cxUmm5cUupqfGCKbGxGemv8J7JL7CWyS1wicjysLvJcwv51zML+dczC/nXMWf+QU3m04JB6UhAmGW1gzGnzYN6mV1BeKYhAQbYtAJXZ8/z7CDlAYfgVcCM4PFBV+CZwQIeuADTntNIk57TSJOe00iTntNImSO5/PGiqn2CY9p87qL7/Xag+H7osImGuvC1hqOw10cV8JwGXCW3LsKlE29mZT3vCqUOr39jfLA")
+}]
+blend_shape_mode = 0
+shadow_mesh = SubResource("ArrayMesh_tsv6f")
+
+[node name="batu normal" type="MeshInstance3D" unique_id=1092661731]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -13.846603)
+material_override = SubResource("StandardMaterial3D_2fhwj")
+mesh = SubResource("ArrayMesh_uish6")

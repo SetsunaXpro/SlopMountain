@@ -1,0 +1,11 @@
+# Godot 4+ specific ignores
+.godot/
+/android/
+*.tmp
+
+# Godot C# ignores
+.vs/
+bin/
+obj/
+*.csproj.user
+
