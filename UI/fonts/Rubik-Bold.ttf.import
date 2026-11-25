@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://dvwfxadbg67mo"
-path="res://.godot/imported/Inter-Bold.ttf-f03597cddb90e182928be8597dcc3c79.fontdata"
+uid="uid://c3upb42rflfgn"
+path="res://.godot/imported/Rubik-Bold.ttf-ca649e36e6b288995767eeafc560b945.fontdata"
 
 [deps]
 
-source_file="res://UI/fonts/Inter-Bold.ttf"
-dest_files=["res://.godot/imported/Inter-Bold.ttf-f03597cddb90e182928be8597dcc3c79.fontdata"]
+source_file="res://UI/fonts/Rubik-Bold.ttf"
+dest_files=["res://.godot/imported/Rubik-Bold.ttf-ca649e36e6b288995767eeafc560b945.fontdata"]
 
 [params]
 

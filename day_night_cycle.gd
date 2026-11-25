@@ -392,7 +392,7 @@ func _populate_win_screen(items_today: int, sc_today: float, collected: float, t
 	if is_instance_valid(_win_header_label):
 		_win_header_label.text = "MOUNTAIN CLEARED!" if is_final else "SHIFT COMPLETE!"
 	if is_instance_valid(_win_sub_label):
-		_win_sub_label.text = "DAY %02d / %02d   •   KUOTA HARIAN TERCAPAI" % [current_day, MAX_DAYS]
+		_win_sub_label.text = "Laporan Shift — Hari %d dari %d" % [current_day, MAX_DAYS]
 	if is_instance_valid(_win_big_earn_label):
 		_win_big_earn_label.text = "+$%.1f SC" % sc_today
 
@@ -428,9 +428,9 @@ func _populate_lose_screen(items_today: int, sc_today: float, collected: float, 
 		_lose_root.visible = true
 
 	if is_instance_valid(_lose_sub_label):
-		_lose_sub_label.text = "DAY %02d / %02d   •   KUOTA TIDAK TERCAPAI" % [current_day, MAX_DAYS]
+		_lose_sub_label.text = "Penutupan Sementara — Hari %d dari %d" % [current_day, MAX_DAYS]
 	if is_instance_valid(_lose_deficit_label):
-		_lose_deficit_label.text = "%.1f / %.1f %s  (%d%%)" % [collected, target, unit_str, int(pct)]
+		_lose_deficit_label.text = "%.1f / %.1f %s (%d%%)" % [collected, target, unit_str, int(pct)]
 	if is_instance_valid(_lose_deficit_bar):
 		_lose_deficit_bar.value = pct
 
@@ -772,46 +772,32 @@ func _setup_ui() -> void:
 	win_paper.size = Vector2(580, 492)
 	_win_root.add_child(win_paper)
 
-	var cert_title := UIAssets.create_label(
-		"SERTIFIKAT PENYELESAIAN SHIFT", 16, Color(0.24, 0.16, 0.08), "black",
-		HORIZONTAL_ALIGNMENT_CENTER
-	)
-	cert_title.position = Vector2(32, 22)
-	cert_title.size = Vector2(516, 24)
-	win_paper.add_child(cert_title)
-
 	_win_sub_label = UIAssets.create_label(
-		"DAY 01 / 08   •   KUOTA HARIAN TERCAPAI", 11, UIAssets.COL_INK_MUTED, "mono",
-		HORIZONTAL_ALIGNMENT_CENTER
+		"Laporan Shift — Hari 1 dari 8", 18, Color(0.24, 0.16, 0.08), "extrabold",
+		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 	)
-	_win_sub_label.position = Vector2(32, 48)
-	_win_sub_label.size = Vector2(516, 18)
+	_win_sub_label.position = Vector2(32, 30)
+	_win_sub_label.size = Vector2(516, 28)
 	win_paper.add_child(_win_sub_label)
 
-	_win_big_earn_label = UIAssets.create_label("+$0.0 SC", 36, UIAssets.COL_GREEN, "black")
-	_win_big_earn_label.position = Vector2(36, 98)
+	_win_big_earn_label = UIAssets.create_label("+$0.0 SC", 38, UIAssets.COL_GREEN, "black")
+	_win_big_earn_label.position = Vector2(36, 102)
 	_win_big_earn_label.size = Vector2(310, 52)
 	win_paper.add_child(_win_big_earn_label)
 
-	var earn_cap := UIAssets.create_label("PENDAPATAN SHIFT HARI INI", 11, UIAssets.COL_INK_MUTED, "mono")
-	earn_cap.position = Vector2(36, 150)
-	earn_cap.size = Vector2(280, 18)
-	win_paper.add_child(earn_cap)
-
-	# Green Rubber Stamp Badge
+	# Solid Green Stamp Pill (zero wireframe outline)
 	var win_stamp := Panel.new()
 	win_stamp.position = Vector2(394, 108)
-	win_stamp.size = Vector2(148, 40)
+	win_stamp.size = Vector2(148, 38)
 	var wssb := StyleBoxFlat.new()
-	wssb.bg_color = Color(0.18, 0.56, 0.28, 0.14)
-	wssb.border_color = UIAssets.COL_GREEN
-	wssb.set_border_width_all(3)
-	wssb.set_corner_radius_all(4)
+	wssb.bg_color = UIAssets.COL_GREEN
+	wssb.set_border_width_all(0)
+	wssb.set_corner_radius_all(6)
 	win_stamp.add_theme_stylebox_override("panel", wssb)
 	win_paper.add_child(win_stamp)
 
 	var ws_lbl := UIAssets.create_label(
-		"✓  CLEARED", 15, UIAssets.COL_GREEN, "black",
+		"✓  LULUS KUOTA", 13, Color.WHITE, "extrabold",
 		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 	)
 	ws_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -819,10 +805,10 @@ func _setup_ui() -> void:
 
 	# 4 Victory Stats Rows (aligned to ruled paper lines)
 	_win_row_vals.clear()
-	var win_keys := ["SAMPAH TERKUMPUL", "PEROLEHAN HARI INI", "TARGET KUOTA", "TOTAL SLOPCREDIT"]
+	var win_keys := ["Sampah Terkumpul", "Hasil Hari Ini", "Target Kuota", "Total Saldo"]
 	var win_ys := [218.0, 266.0, 314.0, 362.0]
 	for i in range(4):
-		var k_lbl := UIAssets.create_label(win_keys[i], 12, UIAssets.COL_INK_MUTED, "mono")
+		var k_lbl := UIAssets.create_label(win_keys[i], 13, UIAssets.COL_INK_MUTED, "bold")
 		k_lbl.position = Vector2(36, win_ys[i])
 		k_lbl.size = Vector2(220, 24)
 		win_paper.add_child(k_lbl)
@@ -899,20 +885,12 @@ func _setup_ui() -> void:
 	lose_paper.size = Vector2(580, 492)
 	_lose_root.add_child(lose_paper)
 
-	var lose_title := UIAssets.create_label(
-		"SURAT PENUTUPAN SEMENTARA", 16, UIAssets.COL_CRIMSON, "black",
-		HORIZONTAL_ALIGNMENT_CENTER
-	)
-	lose_title.position = Vector2(32, 22)
-	lose_title.size = Vector2(516, 24)
-	lose_paper.add_child(lose_title)
-
 	_lose_sub_label = UIAssets.create_label(
-		"DAY 01 / 08   •   KUOTA TIDAK TERCAPAI", 11, Color(0.55, 0.22, 0.20), "mono",
-		HORIZONTAL_ALIGNMENT_CENTER
+		"Penutupan Sementara — Hari 1 dari 8", 18, UIAssets.COL_CRIMSON, "extrabold",
+		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 	)
-	_lose_sub_label.position = Vector2(32, 48)
-	_lose_sub_label.size = Vector2(516, 18)
+	_lose_sub_label.position = Vector2(32, 30)
+	_lose_sub_label.size = Vector2(516, 28)
 	lose_paper.add_child(_lose_sub_label)
 
 	# Bolted Quota Deficit Progress Tank (516 x 64)
@@ -921,13 +899,13 @@ func _setup_ui() -> void:
 	def_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lose_paper.add_child(def_bg)
 
-	var def_title := UIAssets.create_label("PROGRES KUOTA HARIAN", 10, Color(0.75, 0.78, 0.84), "mono")
+	var def_title := UIAssets.create_label("Progres Kuota", 11, Color(0.82, 0.84, 0.88), "bold")
 	def_title.position = Vector2(20, 8)
 	def_title.size = Vector2(220, 16)
 	def_bg.add_child(def_title)
 
 	_lose_deficit_label = UIAssets.create_label(
-		"0.0 / 15.0 SC  (0%)", 11, UIAssets.COL_CRIMSON_HI, "mono",
+		"0.0 / 15.0 SC (0%)", 11, UIAssets.COL_CRIMSON_HI, "bold",
 		HORIZONTAL_ALIGNMENT_RIGHT, VERTICAL_ALIGNMENT_CENTER
 	)
 	_lose_deficit_label.position = Vector2(246, 8)
@@ -945,10 +923,10 @@ func _setup_ui() -> void:
 
 	# 4 Failure Stats Rows (aligned to ruled paper lines)
 	_lose_row_vals.clear()
-	var lose_keys := ["SAMPAH TERKUMPUL", "PEROLEHAN HARI INI", "KEKURANGAN KUOTA", "TOTAL SALDO"]
+	var lose_keys := ["Sampah Terkumpul", "Hasil Hari Ini", "Kekurangan Kuota", "Total Saldo"]
 	var lose_ys := [218.0, 266.0, 314.0, 362.0]
 	for i in range(4):
-		var k_lbl := UIAssets.create_label(lose_keys[i], 12, UIAssets.COL_INK_MUTED, "mono")
+		var k_lbl := UIAssets.create_label(lose_keys[i], 13, UIAssets.COL_INK_MUTED, "bold")
 		k_lbl.position = Vector2(36, lose_ys[i])
 		k_lbl.size = Vector2(220, 24)
 		lose_paper.add_child(k_lbl)

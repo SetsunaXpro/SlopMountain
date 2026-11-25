@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://dafon2jo1tlfc"
-path="res://.godot/imported/Inter-SemiBold.ttf-4b5d279863dd9954b94b5ddcab4fd69d.fontdata"
+uid="uid://b30df8lfs6hgi"
+path="res://.godot/imported/Rubik-SemiBold.ttf-f30a82af1f8c1cbe91050ab20269b888.fontdata"
 
 [deps]
 
-source_file="res://UI/fonts/Inter-SemiBold.ttf"
-dest_files=["res://.godot/imported/Inter-SemiBold.ttf-4b5d279863dd9954b94b5ddcab4fd69d.fontdata"]
+source_file="res://UI/fonts/Rubik-SemiBold.ttf"
+dest_files=["res://.godot/imported/Rubik-SemiBold.ttf-f30a82af1f8c1cbe91050ab20269b888.fontdata"]
 
 [params]
 

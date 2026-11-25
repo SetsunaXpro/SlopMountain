@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://dy88d7yfgiufq"
-path="res://.godot/imported/NotoSansMono-Bold.ttf-4d339faaa9032b3bd9692065e7d40c88.fontdata"
+uid="uid://bfxfdw3du654m"
+path="res://.godot/imported/Rubik-Black.ttf-fdd5b148675092a63a2876ff8de2fcd3.fontdata"
 
 [deps]
 
-source_file="res://UI/fonts/NotoSansMono-Bold.ttf"
-dest_files=["res://.godot/imported/NotoSansMono-Bold.ttf-4d339faaa9032b3bd9692065e7d40c88.fontdata"]
+source_file="res://UI/fonts/Rubik-Black.ttf"
+dest_files=["res://.godot/imported/Rubik-Black.ttf-fdd5b148675092a63a2876ff8de2fcd3.fontdata"]
 
 [params]
 

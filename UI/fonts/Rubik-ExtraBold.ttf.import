@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://dn0a02guowd02"
-path="res://.godot/imported/Inter-Black.ttf-849930b08c93e3515ab17b0cf0735ef5.fontdata"
+uid="uid://nyc71hqpcllj"
+path="res://.godot/imported/Rubik-ExtraBold.ttf-9c7bf874b326989353478970f0e72f1a.fontdata"
 
 [deps]
 
-source_file="res://UI/fonts/Inter-Black.ttf"
-dest_files=["res://.godot/imported/Inter-Black.ttf-849930b08c93e3515ab17b0cf0735ef5.fontdata"]
+source_file="res://UI/fonts/Rubik-ExtraBold.ttf"
+dest_files=["res://.godot/imported/Rubik-ExtraBold.ttf-9c7bf874b326989353478970f0e72f1a.fontdata"]
 
 [params]
 

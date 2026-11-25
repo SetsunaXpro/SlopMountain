@@ -397,22 +397,21 @@ func _build_standard_papers() -> void:
 		click_btn.pressed.connect(_on_contract_selected.bind(i))
 		card.add_child(click_btn)
 
-		# 1. Rubber Stamp Tier Badge (Top-Left)
+		# 1. Solid Paper Tier Pill (Top-Left, zero wireframe outline)
 		var tag_col: Color = data.get("tag_color", COL_BLUE)
 		var stamp_box := Panel.new()
 		stamp_box.position = Vector2(28, 30)
-		stamp_box.size = Vector2(132, 28)
+		stamp_box.size = Vector2(124, 26)
 		stamp_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var ssb := StyleBoxFlat.new()
-		ssb.bg_color = Color(tag_col.r, tag_col.g, tag_col.b, 0.12)
-		ssb.border_color = tag_col
-		ssb.set_border_width_all(2)
-		ssb.set_corner_radius_all(3)
+		ssb.bg_color = tag_col
+		ssb.set_border_width_all(0)
+		ssb.set_corner_radius_all(5)
 		stamp_box.add_theme_stylebox_override("panel", ssb)
 		card.add_child(stamp_box)
 
 		var tag_lbl := UIAssets.create_label(
-			str(data["tag"]), 11, tag_col, "black",
+			str(data["tag"]), 11, Color.WHITE, "extrabold",
 			HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 		)
 		tag_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -420,11 +419,11 @@ func _build_standard_papers() -> void:
 
 		# 2. Mult / Selected Subtag (Top-Right, inset to clear corner tape)
 		var subtag_lbl := UIAssets.create_label(
-			str(data.get("mult_tag", "")), 10, COL_MUTED, "mono",
+			str(data.get("mult_tag", "")), 11, COL_MUTED, "bold",
 			HORIZONTAL_ALIGNMENT_RIGHT, VERTICAL_ALIGNMENT_CENTER
 		)
-		subtag_lbl.position = Vector2(168, 28)
-		subtag_lbl.size = Vector2(134, 32)
+		subtag_lbl.position = Vector2(162, 28)
+		subtag_lbl.size = Vector2(140, 32)
 		card.add_child(subtag_lbl)
 		_subtag_labels.append(subtag_lbl)
 
@@ -460,31 +459,30 @@ func _build_standard_papers() -> void:
 		m_desc.size = Vector2(244, 20)
 		card.add_child(m_desc)
 
-		# 5. Condition Row OR Crimson Hazard Box
+		# 5. Condition Row OR Soft-Tinted Hazard Strip (zero wireframe outline)
 		if data.has("condition_warning"):
 			var warn_box := Panel.new()
 			warn_box.position = Vector2(28, 229)
 			warn_box.size = Vector2(296, 40)
 			warn_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			var wsb := StyleBoxFlat.new()
-			wsb.bg_color = Color(0.76, 0.16, 0.14, 0.11)
-			wsb.border_color = Color(0.76, 0.16, 0.14, 0.65)
-			wsb.set_border_width_all(1)
-			wsb.set_corner_radius_all(4)
+			wsb.bg_color = Color(0.76, 0.16, 0.14, 0.13)
+			wsb.set_border_width_all(0)
+			wsb.set_corner_radius_all(6)
 			warn_box.add_theme_stylebox_override("panel", wsb)
 			card.add_child(warn_box)
 
 			var w_lbl := UIAssets.create_wrapped_label(
 				str(data["condition_warning"]), Vector2(10, 3), Vector2(276, 34),
-				10, COL_RED, "black", HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
+				10, COL_RED, "bold", HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 			)
 			warn_box.add_child(w_lbl)
 		else:
-			_add_spec_row(card, str(data.get("condition_title", "CUACA")), str(data.get("condition_desc", "Normal")), 238, COL_DARK_TEXT)
+			_add_spec_row(card, str(data.get("condition_title", "Cuaca")).capitalize(), str(data.get("condition_desc", "Normal")), 238, COL_DARK_TEXT)
 
 		# 6. Payout & Stamp Spec Rows
-		_add_spec_row(card, "BAYARAN", "+$%d" % int(data["payout"]), 282, COL_GREEN, "black", 16)
-		_add_spec_row(card, "STEMPEL", str(data["stamp_reward"]), 324, COL_BLUE if i == 1 else COL_DARK_TEXT, "bold", 12)
+		_add_spec_row(card, "Bayaran", "+$%d" % int(data["payout"]), 282, COL_GREEN, "black", 16)
+		_add_spec_row(card, "Stempel", str(data["stamp_reward"]), 324, COL_BLUE if i == 1 else COL_DARK_TEXT, "bold", 12)
 
 		# 7. Native Wood Plank Selection Button (328x80 -> visual 296x48 inside paper)
 		var btn_path := "res://UI/02_shop/btn_contract_blue_wood.png" if is_sel else "res://UI/02_shop/btn_contract_brown_wood.png"
@@ -521,31 +519,32 @@ func _build_boss_paper() -> void:
 	paper_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(paper_tex)
 
-	# 1. Crimson Rubber Stamp Badge (Top-Left)
+	# 1. Solid Crimson Event Pill (Top-Left, zero wireframe outline)
 	var stamp := Panel.new()
 	stamp.position = Vector2(30, 28)
-	stamp.size = Vector2(174, 28)
+	stamp.size = Vector2(168, 28)
 	stamp.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var ssb := StyleBoxFlat.new()
-	ssb.bg_color = Color(0.76, 0.16, 0.14, 0.14)
-	ssb.border_color = COL_RED
-	ssb.set_border_width_all(2)
-	ssb.set_corner_radius_all(3)
+	ssb.bg_color = COL_RED
+	ssb.set_border_width_all(0)
+	ssb.set_corner_radius_all(5)
 	stamp.add_theme_stylebox_override("panel", ssb)
 	card.add_child(stamp)
 
 	var tag_lbl := UIAssets.create_label(
-		str(data["tag"]), 11, COL_RED, "black",
+		str(data["tag"]), 11, Color.WHITE, "extrabold",
 		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 	)
 	tag_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	stamp.add_child(tag_lbl)
 
-	# 2. Subtag (Top-Right)
-	var subtag_lbl := UIAssets.create_wrapped_label(
-		str(data["subtag"]), Vector2(218, 22), Vector2(212, 38),
-		10, COL_RED, "mono", HORIZONTAL_ALIGNMENT_RIGHT, VERTICAL_ALIGNMENT_CENTER
+	# 2. Clean Wajib Label (Top-Right, no noisy multi-line eyebrow)
+	var subtag_lbl := UIAssets.create_label(
+		"Event Wajib", 12, COL_RED, "bold",
+		HORIZONTAL_ALIGNMENT_RIGHT, VERTICAL_ALIGNMENT_CENTER
 	)
+	subtag_lbl.position = Vector2(226, 28)
+	subtag_lbl.size = Vector2(204, 28)
 	card.add_child(subtag_lbl)
 
 	# 3. Quota / Event Target (supports KG, SC, FLAG, HEARTS, HP!)
@@ -597,28 +596,27 @@ func _build_boss_paper() -> void:
 	)
 	card.add_child(ev_desc)
 
-	# 5. Crimson Rule Warning Box
+	# 5. Soft Crimson Rule Warning Strip (zero wireframe outline)
 	var warn_box := Panel.new()
 	warn_box.position = Vector2(30, 220)
 	warn_box.size = Vector2(400, 48)
 	warn_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var wsb := StyleBoxFlat.new()
-	wsb.bg_color = Color(0.76, 0.16, 0.14, 0.12)
-	wsb.border_color = Color(0.76, 0.16, 0.14, 0.72)
-	wsb.set_border_width_all(2)
-	wsb.set_corner_radius_all(4)
+	wsb.bg_color = Color(0.76, 0.16, 0.14, 0.13)
+	wsb.set_border_width_all(0)
+	wsb.set_corner_radius_all(6)
 	warn_box.add_theme_stylebox_override("panel", wsb)
 	card.add_child(warn_box)
 
 	var w_lbl := UIAssets.create_wrapped_label(
-		str(data["rule_warning"]), Vector2(10, 4), Vector2(380, 40),
-		10, COL_RED, "black", HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
+		str(data["rule_warning"]), Vector2(12, 4), Vector2(376, 40),
+		10, COL_RED, "bold", HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 	)
 	warn_box.add_child(w_lbl)
 
 	# 6. Payout & Boss Reward Rows
-	_add_spec_row_wide(card, "BAYARAN", "+$%d" % int(data["payout"]), 284, COL_GREEN, "black", 17)
-	_add_spec_row_wide(card, "HADIAH BOSS", str(data["boss_reward"]), 326, Color(0.62, 0.24, 0.74), "bold", 12)
+	_add_spec_row_wide(card, "Bayaran", "+$%d" % int(data["payout"]), 284, COL_GREEN, "black", 17)
+	_add_spec_row_wide(card, "Hadiah Boss", str(data["boss_reward"]), 326, Color(0.62, 0.24, 0.74), "bold", 12)
 
 	# 7. Red Boss Plank Button (432x80 -> visual 400x48 inside paper)
 	var audit_btn := UIAssets.create_wood_button(
@@ -632,7 +630,7 @@ func _build_boss_paper() -> void:
 
 
 func _add_spec_row(parent: Control, key_txt: String, val_txt: String, y: float, val_col: Color, val_style: String = "bold", val_size: int = 12) -> void:
-	var k := UIAssets.create_label(key_txt, 11, COL_MUTED, "mono")
+	var k := UIAssets.create_label(key_txt, 12, COL_MUTED, "bold")
 	k.position = Vector2(28, y)
 	k.size = Vector2(110, 22)
 	parent.add_child(k)
@@ -644,7 +642,7 @@ func _add_spec_row(parent: Control, key_txt: String, val_txt: String, y: float, 
 
 
 func _add_spec_row_wide(parent: Control, key_txt: String, val_txt: String, y: float, val_col: Color, val_style: String = "bold", val_size: int = 12) -> void:
-	var k := UIAssets.create_label(key_txt, 11, COL_MUTED, "mono")
+	var k := UIAssets.create_label(key_txt, 12, COL_MUTED, "bold")
 	k.position = Vector2(30, y)
 	k.size = Vector2(120, 22)
 	parent.add_child(k)

@@ -60,18 +60,20 @@ static func get_tex(res_path: String) -> Texture2D:
 	return tex
 
 
-## Loads a bundled typography face ("black", "bold", "semibold", "mono")
+## Loads a bundled Rubik typography face ("black", "extrabold", "bold", "semibold")
+## Note: "mono" intentionally maps to Rubik-Bold so zero AI-style monospace fonts appear in-game.
 static func get_font(style: String = "bold") -> Font:
 	if _font_cache.has(style):
 		return _font_cache[style]
 
 	var path_map := {
-		"black": "res://UI/fonts/Inter-Black.ttf",
-		"bold": "res://UI/fonts/Inter-Bold.ttf",
-		"semibold": "res://UI/fonts/Inter-SemiBold.ttf",
-		"mono": "res://UI/fonts/NotoSansMono-Bold.ttf",
+		"black": "res://UI/fonts/Rubik-Black.ttf",
+		"extrabold": "res://UI/fonts/Rubik-ExtraBold.ttf",
+		"bold": "res://UI/fonts/Rubik-Bold.ttf",
+		"semibold": "res://UI/fonts/Rubik-SemiBold.ttf",
+		"mono": "res://UI/fonts/Rubik-Bold.ttf",
 	}
-	var res_path: String = path_map.get(style, "res://UI/fonts/Inter-Bold.ttf")
+	var res_path: String = path_map.get(style, "res://UI/fonts/Rubik-Bold.ttf")
 	var font: Font = null
 
 	if ResourceLoader.exists(res_path):

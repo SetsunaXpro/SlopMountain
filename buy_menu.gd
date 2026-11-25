@@ -355,23 +355,14 @@ func _build_single_card(index: int, perk: Dictionary, pos_x: float) -> void:
 	# 6. Wrapped Description Text cleanly inside cream body (y: 214..326)
 	var desc_lbl := UIAssets.create_wrapped_label(
 		str(perk.get("desc", "")),
-		Vector2(22, 214),
+		Vector2(22, 216),
 		Vector2(186, 114),
 		12, UIAssets.COL_INK, "semibold",
 		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 	)
 	card_base.add_child(desc_lbl)
 
-	# 7. Serial Number Footer (y: 344)
-	var serial_lbl := UIAssets.create_label(
-		str(perk.get("serial", "")), 9, Color(0.42, 0.38, 0.34), "mono",
-		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
-	)
-	serial_lbl.position = Vector2(16, 344)
-	serial_lbl.size = Vector2(198, 16)
-	card_base.add_child(serial_lbl)
-
-	# 8. Native Amber Wood BUY Button directly beneath card (222 x 74 w/ 16px shadow pad)
+	# 7. Native Amber Wood BUY Button directly beneath card (222 x 74 w/ 16px shadow pad)
 	var can_buy: bool = _player != null and _player.slop_credit >= int(perk.get("cost", 0))
 	var owned: bool = _player != null and str(perk.get("id", "")) in _get_owned_perks()
 

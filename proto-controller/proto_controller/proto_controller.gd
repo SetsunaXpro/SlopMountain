@@ -1685,66 +1685,60 @@ func _update_machine_hotbar() -> void:
 		var is_sel = (i == selected_machine_index)
 
 		var style := StyleBoxFlat.new()
-		style.corner_radius_top_left = 6
-		style.corner_radius_top_right = 6
-		style.corner_radius_bottom_left = 6
-		style.corner_radius_bottom_right = 6
+		style.set_border_width_all(0)
+		style.set_corner_radius_all(7)
+		style.shadow_color = Color(0.0, 0.0, 0.0, 0.30)
+		style.shadow_size = 4
+		style.shadow_offset = Vector2(0, 2)
 
 		if owned:
 			lbl.text = "[%s] %s %s" % [m.key, m.icon, m.get("short_name", m.name)]
 			if is_sel:
-				style.bg_color = Color(0.18, 0.16, 0.08, 0.92)
-				style.border_color = Color(1.0, 0.85, 0.25, 1.0)
-				style.set_border_width_all(2)
-				lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.45))
+				style.bg_color = Color(0.24, 0.19, 0.09, 0.94)
+				style.border_width_bottom = 3
+				style.border_color = Color(0.98, 0.78, 0.24, 1.0)
+				lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.48))
 			else:
-				style.bg_color = Color(0.08, 0.10, 0.14, 0.82)
-				style.border_color = Color(0.28, 0.35, 0.42, 0.7)
-				style.set_border_width_all(1)
+				style.bg_color = Color(0.09, 0.11, 0.14, 0.82)
 				lbl.add_theme_color_override("font_color", Color(0.85, 0.90, 0.95))
 		else:
 			lbl.text = "[%s] 🔒 %s" % [m.key, m.get("short_name", m.name)]
 			if is_sel:
-				style.bg_color = Color(0.14, 0.12, 0.08, 0.85)
-				style.border_color = Color(0.85, 0.70, 0.2, 0.9)
-				style.set_border_width_all(2)
-				lbl.add_theme_color_override("font_color", Color(0.8, 0.7, 0.4))
+				style.bg_color = Color(0.17, 0.15, 0.10, 0.88)
+				style.border_width_bottom = 3
+				style.border_color = Color(0.85, 0.68, 0.24, 0.85)
+				lbl.add_theme_color_override("font_color", Color(0.86, 0.76, 0.48))
 			else:
-				style.bg_color = Color(0.05, 0.06, 0.08, 0.75)
-				style.border_color = Color(0.18, 0.22, 0.26, 0.6)
-				style.set_border_width_all(1)
-				lbl.add_theme_color_override("font_color", Color(0.5, 0.52, 0.56))
+				style.bg_color = Color(0.07, 0.08, 0.11, 0.76)
+				lbl.add_theme_color_override("font_color", Color(0.55, 0.58, 0.62))
 
 		panel.add_theme_stylebox_override("panel", style)
 
 	# Update Build indicator slot
 	if is_instance_valid(_build_indicator_panel) and is_instance_valid(_build_indicator_lbl):
 		var style := StyleBoxFlat.new()
-		style.corner_radius_top_left = 6
-		style.corner_radius_top_right = 6
-		style.corner_radius_bottom_left = 6
-		style.corner_radius_bottom_right = 6
+		style.set_border_width_all(0)
+		style.set_corner_radius_all(7)
+		style.shadow_color = Color(0.0, 0.0, 0.0, 0.30)
+		style.shadow_size = 4
+		style.shadow_offset = Vector2(0, 2)
 
 		if is_building:
-			_build_indicator_lbl.text = "🔨 [C] PLACE"
-			_build_indicator_lbl.add_theme_color_override("font_color", Color(0.25, 1.0, 0.5))
-			style.bg_color = Color(0.06, 0.22, 0.10, 0.95)
-			style.border_color = Color(0.25, 1.0, 0.5, 1.0)
-			style.set_border_width_all(2)
+			_build_indicator_lbl.text = "🔨 [C] Place"
+			_build_indicator_lbl.add_theme_color_override("font_color", Color(0.32, 1.0, 0.54))
+			style.bg_color = Color(0.09, 0.24, 0.13, 0.94)
+			style.border_width_bottom = 3
+			style.border_color = Color(0.30, 0.92, 0.50, 1.0)
 		else:
 			var m = BUILDABLE_MACHINES[selected_machine_index]
 			if is_machine_owned(m.id):
-				_build_indicator_lbl.text = "[C] BUILD"
-				_build_indicator_lbl.add_theme_color_override("font_color", Color(0.65, 0.9, 1.0))
-				style.bg_color = Color(0.08, 0.14, 0.22, 0.85)
-				style.border_color = Color(0.28, 0.55, 0.85, 0.85)
-				style.set_border_width_all(1)
+				_build_indicator_lbl.text = "[C] Build"
+				_build_indicator_lbl.add_theme_color_override("font_color", Color(0.75, 0.92, 1.0))
+				style.bg_color = Color(0.11, 0.19, 0.28, 0.88)
 			else:
-				_build_indicator_lbl.text = "[M] SHOP"
-				_build_indicator_lbl.add_theme_color_override("font_color", Color(0.55, 0.58, 0.65))
-				style.bg_color = Color(0.06, 0.08, 0.10, 0.7)
-				style.border_color = Color(0.2, 0.25, 0.3, 0.5)
-				style.set_border_width_all(1)
+				_build_indicator_lbl.text = "[M] Shop"
+				_build_indicator_lbl.add_theme_color_override("font_color", Color(0.66, 0.70, 0.76))
+				style.bg_color = Color(0.08, 0.10, 0.13, 0.78)
 
 		_build_indicator_panel.add_theme_stylebox_override("panel", style)
 

@@ -277,24 +277,26 @@ func _build_ui() -> void:
 	)
 	dlg_box.add_child(_dlg_label)
 
-	# Quick Row Toggle Pill (Scrolls smoothly between Row 1 Machines & Row 2 Traps/Compass)
+	# Quick Row Toggle Pill (solid dark wood pill, zero wireframe border)
 	_row_toggle_btn = Button.new()
-	_row_toggle_btn.text = "▼  TRAPS & COMPASS (2/2)"
-	_row_toggle_btn.position = Vector2(876, 2)
-	_row_toggle_btn.size = Vector2(252, 28)
+	_row_toggle_btn.text = "▼  Traps & Compass (2/2)"
+	_row_toggle_btn.position = Vector2(884, 2)
+	_row_toggle_btn.size = Vector2(244, 28)
 	_row_toggle_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	_row_toggle_btn.add_theme_font_override("font", UIAssets.get_font("black"))
-	_row_toggle_btn.add_theme_font_size_override("font_size", 11)
+	_row_toggle_btn.add_theme_font_override("font", UIAssets.get_font("bold"))
+	_row_toggle_btn.add_theme_font_size_override("font_size", 12)
 	_row_toggle_btn.add_theme_color_override("font_color", UIAssets.COL_GOLD)
 	_row_toggle_btn.add_theme_color_override("font_hover_color", Color.WHITE)
 	var rsb := StyleBoxFlat.new()
-	rsb.bg_color = Color(0.14, 0.11, 0.08, 0.92)
-	rsb.border_color = Color(0.84, 0.62, 0.22, 0.90)
-	rsb.set_border_width_all(1)
-	rsb.set_corner_radius_all(5)
+	rsb.bg_color = Color(0.18, 0.13, 0.09, 0.94)
+	rsb.set_border_width_all(0)
+	rsb.set_corner_radius_all(6)
+	rsb.shadow_color = Color(0.0, 0.0, 0.0, 0.35)
+	rsb.shadow_size = 4
+	rsb.shadow_offset = Vector2(0, 2)
 	_row_toggle_btn.add_theme_stylebox_override("normal", rsb)
 	var rsb_h: StyleBoxFlat = rsb.duplicate()
-	rsb_h.bg_color = Color(0.24, 0.18, 0.12, 0.98)
+	rsb_h.bg_color = Color(0.28, 0.20, 0.13, 0.98)
 	_row_toggle_btn.add_theme_stylebox_override("hover", rsb_h)
 	_row_toggle_btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	_row_toggle_btn.pressed.connect(_on_toggle_row_pressed)
@@ -317,9 +319,9 @@ func _build_ui() -> void:
 	_content.add_child(_mod_shop_btn)
 
 	var hint_lbl := UIAssets.create_label(
-		"[1-3] SELECT MACHINE   •   [C] PLACE IN WORLD   •   SCROLL FOR ALL 6 ITEMS",
-		10, Color(0.86, 0.80, 0.70, 0.85), "mono",
-		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER, 0.55
+		"Tekan [1-3] pilih mesin, lalu [C] untuk pasang di dunia",
+		12, Color(0.88, 0.83, 0.74, 0.82), "semibold",
+		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER, 0.5
 	)
 	hint_lbl.position = Vector2(314, 666)
 	hint_lbl.size = Vector2(624, 24)
@@ -368,7 +370,7 @@ func scroll_to_row(row_index: int) -> void:
 	var target_y := int(ROW_STEP_Y) if _showing_row2 else 0
 	_scroll.scroll_vertical = target_y
 	if is_instance_valid(_row_toggle_btn):
-		_row_toggle_btn.text = "▲  MACHINES (1/2)" if _showing_row2 else "▼  TRAPS & COMPASS (2/2)"
+		_row_toggle_btn.text = "▲  Machines (1/2)" if _showing_row2 else "▼  Traps & Compass (2/2)"
 
 
 func _on_toggle_row_pressed() -> void:
@@ -378,7 +380,7 @@ func _on_toggle_row_pressed() -> void:
 		var tw := create_tween()
 		tw.tween_property(_scroll, "scroll_vertical", target_y, 0.22).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	if is_instance_valid(_row_toggle_btn):
-		_row_toggle_btn.text = "▲  MACHINES (1/2)" if _showing_row2 else "▼  TRAPS & COMPASS (2/2)"
+		_row_toggle_btn.text = "▲  Machines (1/2)" if _showing_row2 else "▼  Traps & Compass (2/2)"
 
 
 # ===========================================================================
@@ -494,23 +496,14 @@ func _build_card(machine: Dictionary, pos_x: float, pos_y: float = 12.0) -> void
 	# 6. Wrapped Description Text cleanly inside cream body
 	var desc_lbl := UIAssets.create_wrapped_label(
 		str(machine.get("desc", "")),
-		Vector2(22, 212),
+		Vector2(22, 214),
 		Vector2(186, 118),
 		11, UIAssets.COL_INK, "semibold",
 		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 	)
 	card_base.add_child(desc_lbl)
 
-	# 7. Serial Number Footer
-	var serial_lbl := UIAssets.create_label(
-		str(machine.get("serial", "")), 9, Color(0.42, 0.38, 0.34), "mono",
-		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
-	)
-	serial_lbl.position = Vector2(16, 344)
-	serial_lbl.size = Vector2(198, 16)
-	card_base.add_child(serial_lbl)
-
-	# 8. Native Amber Wood BUY Button positioned relative to THIS card's pos_y!
+	# 7. Native Amber Wood BUY Button positioned relative to THIS card's pos_y!
 	var mid: String = str(machine.get("id", ""))
 	var owned: bool = _is_machine_owned(mid)
 	var can_buy: bool = _player != null and _player.slop_credit >= int(machine.get("cost", 0))

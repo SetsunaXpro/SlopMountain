@@ -94,15 +94,15 @@ func _process(_delta: float) -> void:
 		var is_waiting: bool = bool(dnc.get("is_waiting_for_day_start")) if "is_waiting_for_day_start" in dnc else false
 		end_day_btn.visible = (not dnc.is_night) and (not is_waiting)
 		if quota_passed:
-			end_day_btn.text = "✓  HOLD [N] END DAY • MET"
+			end_day_btn.text = "✓  Hold [N] End Day"
 			end_day_btn.add_theme_color_override("font_color", COL_GREEN)
 			if _end_day_sb_normal:
-				_end_day_sb_normal.border_color = COL_GREEN
+				_end_day_sb_normal.bg_color = Color(0.09, 0.17, 0.12, 0.90)
 		else:
-			end_day_btn.text = "HOLD [N]  END DAY"
+			end_day_btn.text = "Hold [N] End Day"
 			end_day_btn.add_theme_color_override("font_color", COL_AMBER)
 			if _end_day_sb_normal:
-				_end_day_sb_normal.border_color = COL_AMBER_DARK
+				_end_day_sb_normal.bg_color = Color(0.09, 0.11, 0.14, 0.86)
 
 	# Sync EventSystem state if active
 	if dnc and "event_system" in dnc and dnc.event_system:
@@ -250,30 +250,31 @@ func _create_time_banner() -> Control:
 
 func _create_end_day_button() -> Button:
 	var btn := Button.new()
-	btn.text = "HOLD [N]  END DAY"
+	btn.text = "Hold [N] End Day"
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	btn.add_theme_font_override("font", UIAssets.get_font("mono"))
-	btn.add_theme_font_size_override("font_size", 10)
+	btn.add_theme_font_override("font", UIAssets.get_font("bold"))
+	btn.add_theme_font_size_override("font_size", 11)
 	btn.add_theme_color_override("font_color", COL_AMBER)
 	btn.add_theme_color_override("font_hover_color", Color.WHITE)
 	btn.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	btn.offset_left = -104
-	btn.offset_right = 104
+	btn.offset_left = -94
+	btn.offset_right = 94
 	btn.offset_top = 86
-	btn.offset_bottom = 108
-	btn.custom_minimum_size = Vector2(208, 22)
-	btn.size = Vector2(208, 22)
+	btn.offset_bottom = 110
+	btn.custom_minimum_size = Vector2(188, 24)
+	btn.size = Vector2(188, 24)
 
 	_end_day_sb_normal = StyleBoxFlat.new()
-	_end_day_sb_normal.bg_color = Color(0.09, 0.11, 0.14, 0.88)
-	_end_day_sb_normal.border_color = COL_AMBER_DARK
-	_end_day_sb_normal.set_border_width_all(1)
-	_end_day_sb_normal.set_corner_radius_all(3)
+	_end_day_sb_normal.bg_color = Color(0.09, 0.11, 0.14, 0.86)
+	_end_day_sb_normal.set_border_width_all(0)
+	_end_day_sb_normal.set_corner_radius_all(6)
+	_end_day_sb_normal.shadow_color = Color(0.0, 0.0, 0.0, 0.32)
+	_end_day_sb_normal.shadow_size = 5
+	_end_day_sb_normal.shadow_offset = Vector2(0, 2)
 	btn.add_theme_stylebox_override("normal", _end_day_sb_normal)
 
 	_end_day_sb_hover = _end_day_sb_normal.duplicate()
 	_end_day_sb_hover.bg_color = Color(0.16, 0.19, 0.24, 0.96)
-	_end_day_sb_hover.border_color = COL_AMBER
 	btn.add_theme_stylebox_override("hover", _end_day_sb_hover)
 	btn.add_theme_stylebox_override("pressed", _end_day_sb_hover)
 	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
@@ -409,24 +410,23 @@ func _create_perks_panel() -> Control:
 func _create_keybind_hint_bar() -> Control:
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	panel.offset_left = -268
-	panel.offset_right = 268
+	panel.offset_left = -260
+	panel.offset_right = 260
 	panel.offset_top = -28
 	panel.offset_bottom = -6
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.06, 0.08, 0.11, 0.68)
-	sb.border_color = Color(0.45, 0.34, 0.22, 0.48)
-	sb.set_border_width_all(1)
-	sb.set_corner_radius_all(4)
-	sb.content_margin_left = 12
-	sb.content_margin_right = 12
+	sb.bg_color = Color(0.06, 0.08, 0.11, 0.56)
+	sb.set_border_width_all(0)
+	sb.set_corner_radius_all(6)
+	sb.content_margin_left = 14
+	sb.content_margin_right = 14
 	panel.add_theme_stylebox_override("panel", sb)
 
 	var lbl := UIAssets.create_label(
-		"[B] Mod Shop   •   [M] Mesin   •   [Q] Kontrak   •   [G] Granat   •   [ESC] Pause",
-		10, Color(0.88, 0.86, 0.80, 0.90), "mono",
+		"[B] Shop    [M] Mesin    [Q] Kontrak    [G] Lempar    [ESC] Pause",
+		11, Color(0.90, 0.88, 0.82, 0.88), "semibold",
 		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 	)
 	panel.add_child(lbl)
@@ -434,7 +434,7 @@ func _create_keybind_hint_bar() -> Control:
 
 
 # ===========================================================================
-# Event HUD Panel & EventSystem Integration (100% Preserved + Styled)
+# Event HUD Panel & EventSystem Integration (100% Preserved + Matte Style)
 # ===========================================================================
 
 func _create_event_panel() -> PanelContainer:
@@ -449,13 +449,17 @@ func _create_event_panel() -> PanelContainer:
 	event_panel.visible = false
 
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.08, 0.10, 0.14, 0.92)
-	sb.border_color = Color(0.92, 0.36, 0.24, 0.95)
-	sb.set_border_width_all(2)
+	sb.bg_color = Color(0.09, 0.11, 0.14, 0.90)
+	sb.set_border_width_all(0)
+	sb.border_width_left = 4
+	sb.border_color = Color(0.92, 0.36, 0.24, 1.0)
 	sb.set_corner_radius_all(6)
+	sb.shadow_color = Color(0.0, 0.0, 0.0, 0.38)
+	sb.shadow_size = 8
+	sb.shadow_offset = Vector2(0, 3)
 	sb.content_margin_left = 14
 	sb.content_margin_right = 14
-	sb.content_margin_top = 6
+	sb.content_margin_top = 7
 	sb.content_margin_bottom = 8
 	event_panel.add_theme_stylebox_override("panel", sb)
 

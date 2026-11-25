@@ -400,25 +400,24 @@ class HowToPlayOverlay extends CanvasLayer:
 			var sy: float = 72.0 + float(i) * 92.0
 			var badge := Panel.new()
 			badge.position = Vector2(372, sy)
-			badge.size = Vector2(34, 26)
+			badge.size = Vector2(30, 26)
 			var bsb := StyleBoxFlat.new()
-			bsb.bg_color = Color(0.18, 0.22, 0.27, 1.0)
-			bsb.border_color = Color(0.88, 0.65, 0.18, 1.0)
-			bsb.set_border_width_all(2)
-			bsb.set_corner_radius_all(4)
+			bsb.bg_color = Color(0.24, 0.17, 0.10, 1.0)
+			bsb.set_border_width_all(0)
+			bsb.set_corner_radius_all(6)
 			badge.add_theme_stylebox_override("panel", bsb)
 			paper.add_child(badge)
 
 			var b_lbl := UIAssets.create_label(
-				steps[i][0], 12, UIAssets.COL_GOLD, "mono",
+				str(i + 1), 13, UIAssets.COL_GOLD, "black",
 				HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 			)
 			b_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 			badge.add_child(b_lbl)
 
 			var st_lbl := UIAssets.create_label(steps[i][1], 13, UIAssets.COL_INK, "black")
-			st_lbl.position = Vector2(414, sy + 2)
-			st_lbl.size = Vector2(262, 22)
+			st_lbl.position = Vector2(410, sy + 2)
+			st_lbl.size = Vector2(266, 22)
 			paper.add_child(st_lbl)
 
 			var sb_lbl := UIAssets.create_wrapped_label(
@@ -550,23 +549,19 @@ class SettingsOverlay extends CanvasLayer:
 
 		var info_box := Panel.new()
 		info_box.position = Vector2(384, 248)
-		info_box.size = Vector2(288, 72)
+		info_box.size = Vector2(288, 62)
 		var isb := StyleBoxFlat.new()
 		isb.bg_color = Color(0.86, 0.80, 0.68, 0.85)
-		isb.border_color = Color(0.45, 0.36, 0.26, 0.6)
-		isb.set_border_width_all(2)
-		isb.set_corner_radius_all(6)
+		isb.set_border_width_all(0)
+		isb.set_corner_radius_all(8)
 		info_box.add_theme_stylebox_override("panel", isb)
 		paper.add_child(info_box)
 
-		var p_t := UIAssets.create_label("PRESET KONTROL AKTIF", 11, UIAssets.COL_INK_MUTED, "mono")
-		p_t.position = Vector2(14, 10)
-		p_t.size = Vector2(260, 18)
-		info_box.add_child(p_t)
-
-		var p_v := UIAssets.create_label("KEYBOARD (WASD) + MOUSE", 14, UIAssets.COL_INK, "black")
-		p_v.position = Vector2(14, 34)
-		p_v.size = Vector2(260, 24)
+		var p_v := UIAssets.create_label(
+			"Kontrol: Keyboard (WASD) + Mouse", 13, UIAssets.COL_INK, "bold",
+			HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
+		)
+		p_v.set_anchors_preset(Control.PRESET_FULL_RECT)
 		info_box.add_child(p_v)
 
 		var btn_save := UIAssets.create_wood_button(
@@ -708,62 +703,53 @@ class CreditsOverlay extends CanvasLayer:
 		var paper: Control = shell["paper"]
 
 		var team_hdr := UIAssets.create_label(
-			"TIM PENGEMBANG  —  DAVDEV 272", 18, Color(0.24, 0.16, 0.08), "black",
+			"Tim DavDev 272", 21, Color(0.24, 0.16, 0.08), "black",
 			HORIZONTAL_ALIGNMENT_CENTER
 		)
-		team_hdr.position = Vector2(30, 22)
-		team_hdr.size = Vector2(640, 28)
+		team_hdr.position = Vector2(30, 26)
+		team_hdr.size = Vector2(640, 30)
 		paper.add_child(team_hdr)
 
-		var sub_hdr := UIAssets.create_label(
-			"GIMERSIA INSPIRE 2026  •  UNIVERSITAS NUSA MANDIRI", 11, UIAssets.COL_INK_MUTED, "mono",
-			HORIZONTAL_ALIGNMENT_CENTER
-		)
-		sub_hdr.position = Vector2(30, 50)
-		sub_hdr.size = Vector2(640, 18)
-		paper.add_child(sub_hdr)
-
 		var div := ColorRect.new()
-		div.position = Vector2(36, 76)
+		div.position = Vector2(36, 68)
 		div.size = Vector2(628, 2)
-		div.color = Color(0.35, 0.26, 0.18, 0.45)
+		div.color = Color(0.35, 0.26, 0.18, 0.32)
 		paper.add_child(div)
 
 		var members := [
-			["FAHRI",             "Team Lead & Game Design",    Vector2(36, 94)],
-			["GARY HARDYANSYAH",  "Project Management",         Vector2(364, 94)],
-			["ABUDAN",            "UI/UX Design & Programming", Vector2(36, 168)],
-			["ROCKY",             "2D / 3D Art",                Vector2(364, 168)],
-			["ADHISTYA SUNASR",   "Art & Sound Design",         Vector2(200, 242)],
+			["Fahri",             "Team Lead & Game Design",    Vector2(36, 88)],
+			["Gary Hardyansyah",  "Project Management",         Vector2(364, 88)],
+			["Abudan",            "UI/UX Design & Programming", Vector2(36, 164)],
+			["Rocky",             "2D / 3D Art",                Vector2(364, 164)],
+			["Adhistya Sunasr",   "Art & Sound Design",         Vector2(200, 240)],
 		]
 		for m in members:
 			var card := Panel.new()
 			card.position = m[2]
-			card.size = Vector2(300, 62)
+			card.size = Vector2(300, 64)
 			var csb := StyleBoxFlat.new()
-			csb.bg_color = Color(0.88, 0.82, 0.70, 0.72)
-			csb.border_color = Color(0.45, 0.36, 0.26, 0.55)
-			csb.set_border_width_all(1)
-			csb.set_corner_radius_all(5)
+			csb.bg_color = Color(0.87, 0.81, 0.69, 0.82)
+			csb.set_border_width_all(0)
+			csb.set_corner_radius_all(8)
 			card.add_theme_stylebox_override("panel", csb)
 			paper.add_child(card)
 
 			var n_lbl := UIAssets.create_label(
-				m[0], 15, UIAssets.COL_INK, "black", HORIZONTAL_ALIGNMENT_CENTER
+				m[0], 16, UIAssets.COL_INK, "extrabold", HORIZONTAL_ALIGNMENT_CENTER
 			)
-			n_lbl.position = Vector2(8, 8)
+			n_lbl.position = Vector2(8, 9)
 			n_lbl.size = Vector2(284, 22)
 			card.add_child(n_lbl)
 
 			var r_lbl := UIAssets.create_label(
 				m[1], 12, Color(0.36, 0.28, 0.20), "semibold", HORIZONTAL_ALIGNMENT_CENTER
 			)
-			r_lbl.position = Vector2(8, 33)
+			r_lbl.position = Vector2(8, 35)
 			r_lbl.size = Vector2(284, 20)
 			card.add_child(r_lbl)
 
 		var tech := UIAssets.create_label(
-			"BUILT WITH GODOT ENGINE 4  •  FIGMA", 11, UIAssets.COL_INK_MUTED, "mono",
+			"Gimersia Inspire 2026 — Universitas Nusa Mandiri", 12, UIAssets.COL_INK_MUTED, "semibold",
 			HORIZONTAL_ALIGNMENT_CENTER
 		)
 		tech.position = Vector2(36, 326)

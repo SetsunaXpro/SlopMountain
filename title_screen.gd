@@ -218,27 +218,18 @@ func _build_ui() -> void:
 	quit_btn.pressed.connect(_on_quit_pressed)
 	_content.add_child(quit_btn)
 
-	# 4. Styled Co-op Multiplayer Dispatch Panel (Bottom-Right)
+	# 4. Co-op Multiplayer Panel (Bottom-Right, matte card without outlines or eyebrows)
 	_build_coop_panel()
 
-	# 5. Footer Bar
+	# 5. Single subtle version tag (bottom-left only)
 	var footer_left := UIAssets.create_label(
-		"v0.2 CO-OP BUILD  //  GIMERSIA INSPIRE 2026  •  DAVDEV 272",
-		11, Color(0.74, 0.78, 0.84, 0.82), "mono",
-		HORIZONTAL_ALIGNMENT_LEFT, VERTICAL_ALIGNMENT_CENTER, 0.65
+		"gimersia alpha 0.2.0",
+		12, Color(0.84, 0.82, 0.78, 0.56), "semibold",
+		HORIZONTAL_ALIGNMENT_LEFT, VERTICAL_ALIGNMENT_CENTER, 0.4
 	)
 	footer_left.position = Vector2(68, 678)
-	footer_left.size = Vector2(520, 22)
+	footer_left.size = Vector2(320, 22)
 	_content.add_child(footer_left)
-
-	var footer_right := UIAssets.create_label(
-		"SLOPMOUNTAIN  //  RANGER UNIT 01",
-		11, Color(0.74, 0.78, 0.84, 0.82), "mono",
-		HORIZONTAL_ALIGNMENT_RIGHT, VERTICAL_ALIGNMENT_CENTER, 0.65
-	)
-	footer_right.position = Vector2(860, 678)
-	footer_right.size = Vector2(364, 22)
-	_content.add_child(footer_right)
 
 	# 6. Modal Overlay for Challenge Mode & Co-op Lobby Dialogs
 	_modal_overlay = Control.new()
@@ -257,56 +248,41 @@ func _build_ui() -> void:
 func _build_coop_panel() -> void:
 	var coop_panel := PanelContainer.new()
 	coop_panel.name = "CoopPanel"
-	coop_panel.position = Vector2(886, 408)
-	coop_panel.custom_minimum_size = Vector2(342, 232)
-	coop_panel.size = Vector2(342, 232)
+	coop_panel.position = Vector2(894, 434)
+	coop_panel.custom_minimum_size = Vector2(328, 206)
+	coop_panel.size = Vector2(328, 206)
 	var coop_style := StyleBoxFlat.new()
-	coop_style.bg_color = Color(0.08, 0.11, 0.14, 0.90)
-	coop_style.border_color = Color(0.84, 0.62, 0.22, 0.90)
-	coop_style.set_border_width_all(2)
-	coop_style.set_corner_radius_all(8)
-	coop_style.content_margin_left = 16
-	coop_style.content_margin_right = 16
-	coop_style.content_margin_top = 14
-	coop_style.content_margin_bottom = 12
+	coop_style.bg_color = Color(0.09, 0.11, 0.14, 0.88)
+	coop_style.set_border_width_all(0)
+	coop_style.set_corner_radius_all(10)
+	coop_style.shadow_color = Color(0.0, 0.0, 0.0, 0.45)
+	coop_style.shadow_size = 12
+	coop_style.shadow_offset = Vector2(0, 4)
+	coop_style.content_margin_left = 18
+	coop_style.content_margin_right = 18
+	coop_style.content_margin_top = 16
+	coop_style.content_margin_bottom = 14
 	coop_panel.add_theme_stylebox_override("panel", coop_style)
 	_content.add_child(coop_panel)
 
 	var coop_vbox := VBoxContainer.new()
-	coop_vbox.add_theme_constant_override("separation", 8)
+	coop_vbox.add_theme_constant_override("separation", 9)
 	coop_panel.add_child(coop_vbox)
 
-	# Header Row
-	var hdr_box := VBoxContainer.new()
-	hdr_box.add_theme_constant_override("separation", 2)
-	coop_vbox.add_child(hdr_box)
-
 	var coop_title := UIAssets.create_label(
-		"CO-OP DISPATCH  (ONLINE / LAN)",
-		13, UIAssets.COL_GOLD, "black",
-		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER, 0.45
+		"Co-op Multiplayer",
+		15, UIAssets.COL_CREAM, "extrabold",
+		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER, 0.4
 	)
-	hdr_box.add_child(coop_title)
+	coop_vbox.add_child(coop_title)
 
-	var coop_sub := UIAssets.create_label(
-		"1–5 RANGERS  •  STEAM / NORAY / LAN",
-		10, Color(0.68, 0.74, 0.80, 0.85), "mono",
-		HORIZONTAL_ALIGNMENT_CENTER
-	)
-	hdr_box.add_child(coop_sub)
-
-	var sep := ColorRect.new()
-	sep.custom_minimum_size = Vector2(0, 1)
-	sep.color = Color(0.84, 0.62, 0.22, 0.35)
-	coop_vbox.add_child(sep)
-
-	var host_btn := _create_panel_button("HOST CO-OP (ONLINE)", Color(0.16, 0.44, 0.68), Color(0.24, 0.56, 0.84))
+	var host_btn := _create_panel_button("Host Online", Color(0.18, 0.46, 0.72), Color(0.24, 0.56, 0.86))
 	host_btn.custom_minimum_size = Vector2(0, 36)
 	host_btn.pressed.connect(_on_host_coop_pressed)
 	coop_vbox.add_child(host_btn)
 
-	var host_lan_btn := _create_panel_button("HOST LAN (PORT 7777)", Color(0.20, 0.27, 0.32), Color(0.28, 0.38, 0.44))
-	host_lan_btn.custom_minimum_size = Vector2(0, 32)
+	var host_lan_btn := _create_panel_button("Host LAN (Port 7777)", Color(0.20, 0.25, 0.30), Color(0.28, 0.34, 0.40))
+	host_lan_btn.custom_minimum_size = Vector2(0, 34)
 	host_lan_btn.pressed.connect(_on_host_lan_pressed)
 	coop_vbox.add_child(host_lan_btn)
 
@@ -317,26 +293,25 @@ func _build_coop_panel() -> void:
 	_coop_ip_input = LineEdit.new()
 	_coop_ip_input.text = "127.0.0.1"
 	_coop_ip_input.placeholder_text = "Room Code / IP"
-	_coop_ip_input.custom_minimum_size = Vector2(0, 34)
+	_coop_ip_input.custom_minimum_size = Vector2(0, 36)
 	_coop_ip_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_coop_ip_input.add_theme_font_override("font", UIAssets.get_font("mono"))
-	_coop_ip_input.add_theme_font_size_override("font_size", 12)
+	_coop_ip_input.add_theme_font_override("font", UIAssets.get_font("semibold"))
+	_coop_ip_input.add_theme_font_size_override("font_size", 13)
 	_coop_ip_input.add_theme_color_override("font_color", UIAssets.COL_CREAM)
 	var input_sb := StyleBoxFlat.new()
-	input_sb.bg_color = Color(0.05, 0.07, 0.10, 0.95)
-	input_sb.border_color = Color(0.35, 0.42, 0.50, 0.85)
-	input_sb.set_border_width_all(1)
-	input_sb.set_corner_radius_all(5)
-	input_sb.content_margin_left = 10
+	input_sb.bg_color = Color(0.05, 0.06, 0.09, 0.94)
+	input_sb.set_border_width_all(0)
+	input_sb.set_corner_radius_all(6)
+	input_sb.content_margin_left = 12
 	input_sb.content_margin_right = 8
 	_coop_ip_input.add_theme_stylebox_override("normal", input_sb)
 	var input_foc: StyleBoxFlat = input_sb.duplicate()
-	input_foc.border_color = UIAssets.COL_GOLD
+	input_foc.bg_color = Color(0.08, 0.10, 0.14, 0.98)
 	_coop_ip_input.add_theme_stylebox_override("focus", input_foc)
 	join_hbox.add_child(_coop_ip_input)
 
-	var join_btn := _create_panel_button("JOIN", Color(0.76, 0.46, 0.12), Color(0.90, 0.58, 0.16))
-	join_btn.custom_minimum_size = Vector2(82, 34)
+	var join_btn := _create_panel_button("Join", Color(0.78, 0.48, 0.14), Color(0.90, 0.58, 0.18))
+	join_btn.custom_minimum_size = Vector2(78, 36)
 	join_btn.pressed.connect(_on_join_coop_pressed)
 	join_hbox.add_child(join_btn)
 
@@ -344,7 +319,7 @@ func _build_coop_panel() -> void:
 		"", 11, UIAssets.COL_GOLD, "semibold",
 		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 	)
-	_coop_status_label.custom_minimum_size = Vector2(0, 16)
+	_coop_status_label.custom_minimum_size = Vector2(0, 14)
 	coop_vbox.add_child(_coop_status_label)
 
 
@@ -352,31 +327,33 @@ func _create_panel_button(label_text: String, bg_col: Color, hov_col: Color, txt
 	var btn := Button.new()
 	btn.text = label_text
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	btn.add_theme_font_override("font", UIAssets.get_font("black"))
-	btn.add_theme_font_size_override("font_size", 12)
+	btn.add_theme_font_override("font", UIAssets.get_font("bold"))
+	btn.add_theme_font_size_override("font_size", 13)
 	btn.add_theme_color_override("font_color", txt_col)
 	btn.add_theme_color_override("font_hover_color", Color.WHITE)
 	btn.add_theme_color_override("font_disabled_color", Color(0.55, 0.58, 0.62))
 
 	var sb := StyleBoxFlat.new()
 	sb.bg_color = bg_col
-	sb.border_color = bg_col.lightened(0.28)
-	sb.set_border_width_all(1)
-	sb.set_corner_radius_all(5)
+	sb.set_border_width_all(0)
+	sb.set_corner_radius_all(6)
+	sb.shadow_color = Color(0.0, 0.0, 0.0, 0.25)
+	sb.shadow_size = 3
+	sb.shadow_offset = Vector2(0, 2)
 	btn.add_theme_stylebox_override("normal", sb)
 
 	var sb_h: StyleBoxFlat = sb.duplicate()
 	sb_h.bg_color = hov_col
-	sb_h.border_color = UIAssets.COL_GOLD
 	btn.add_theme_stylebox_override("hover", sb_h)
 
 	var sb_p: StyleBoxFlat = sb.duplicate()
-	sb_p.bg_color = bg_col.darkened(0.18)
+	sb_p.bg_color = bg_col.darkened(0.16)
+	sb_p.shadow_size = 0
 	btn.add_theme_stylebox_override("pressed", sb_p)
 
 	var sb_d: StyleBoxFlat = sb.duplicate()
 	sb_d.bg_color = Color(0.16, 0.18, 0.22, 0.75)
-	sb_d.border_color = Color(0.25, 0.28, 0.32, 0.6)
+	sb_d.shadow_size = 0
 	btn.add_theme_stylebox_override("disabled", sb_d)
 	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 	return btn
@@ -725,7 +702,7 @@ func _show_challenge_modal() -> void:
 	btn_hbox.add_child(cancel_btn)
 
 
-func _create_ranger_modal_panel(panel_size: Vector2, border_col: Color) -> PanelContainer:
+func _create_ranger_modal_panel(panel_size: Vector2, _border_col: Color) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.offset_left = -panel_size.x * 0.5
@@ -734,10 +711,12 @@ func _create_ranger_modal_panel(panel_size: Vector2, border_col: Color) -> Panel
 	panel.offset_bottom = panel_size.y * 0.5
 
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.09, 0.11, 0.15, 0.97)
-	sb.border_color = border_col
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(10)
+	sb.bg_color = Color(0.10, 0.12, 0.16, 0.97)
+	sb.set_border_width_all(0)
+	sb.set_corner_radius_all(12)
+	sb.shadow_color = Color(0.0, 0.0, 0.0, 0.55)
+	sb.shadow_size = 18
+	sb.shadow_offset = Vector2(0, 6)
 	sb.content_margin_left = 26
 	sb.content_margin_right = 26
 	sb.content_margin_top = 22
