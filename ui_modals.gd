@@ -127,10 +127,12 @@ class PauseMenuOverlay extends CanvasLayer:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 		_build_ui()
 		_refresh_status()
+		UIAssets.sync_bgm()
 
 	func _exit_tree() -> void:
 		if _did_pause_tree and get_tree():
 			get_tree().paused = false
+		UIAssets.sync_bgm()
 		closed.emit()
 
 	func _unhandled_input(event: InputEvent) -> void:

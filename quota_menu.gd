@@ -52,6 +52,7 @@ var _papers_container: Control = null
 func _ready() -> void:
 	layer = 20
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	add_to_group("quota_menu")
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
 	_resolve_references()
@@ -66,6 +67,7 @@ func _ready() -> void:
 	var hud = get_tree().get_first_node_in_group("game_hud")
 	if hud:
 		hud.visible = false
+	UIAssets.sync_bgm()
 
 	if NetworkManager != null and NetworkManager.is_multiplayer_active():
 		if not NetworkManager.quota_votes_updated.is_connected(_refresh_vote_ui):
@@ -79,6 +81,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	UIAssets.sync_bgm()
 	if NetworkManager != null:
 		if NetworkManager.quota_votes_updated.is_connected(_refresh_vote_ui):
 			NetworkManager.quota_votes_updated.disconnect(_refresh_vote_ui)

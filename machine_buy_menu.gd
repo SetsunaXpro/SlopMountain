@@ -113,6 +113,7 @@ var _showing_row2: bool = false
 func _ready() -> void:
 	layer = 20
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	add_to_group("machine_buy_menu")
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
 	_resolve_references()
@@ -124,12 +125,14 @@ func _ready() -> void:
 	var hud = get_tree().get_first_node_in_group("game_hud")
 	if hud:
 		hud.visible = false
+	UIAssets.sync_bgm()
 
 
 func _exit_tree() -> void:
 	var hud = get_tree().get_first_node_in_group("game_hud")
 	if hud:
 		hud.visible = true
+	UIAssets.sync_bgm()
 
 
 func _resolve_references() -> void:

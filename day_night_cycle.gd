@@ -112,6 +112,7 @@ func set_game_mode(mode: int) -> void:
 
 func _ready() -> void:
 	add_to_group("day_night_cycle")
+	UIAssets.load_and_apply_settings()
 	var es_script = preload("res://event_system.gd")
 	event_system = es_script.new()
 	event_system.dnc = self
@@ -124,7 +125,19 @@ func _ready() -> void:
 		_apply_lighting(0.0)
 	else:
 		emit_signal("day_started", current_day)
+	UIAssets.sync_bgm()
 	print("DayNightCycle: Initialized. Day duration: %.1f seconds (~%.1f mins). Day 1 Quota: %.1f" % [day_duration_seconds, day_duration_seconds / 60.0, get_current_quota()])
+
+
+func get_music_state() -> String:
+	if is_instance_valid(_night_modal) and _night_modal.visible:
+		if is_instance_valid(_lose_root) and _lose_root.visible:
+			return "fail"
+		if is_instance_valid(_win_root) and _win_root.visible:
+			return "win"
+	if event_system != null and event_system.is_event_active:
+		return "boss"
+	return "gameplay"
 
 
 func _setup_lighting_references() -> void:
@@ -643,6 +656,7 @@ func _show_night_modal(animate: bool = true) -> void:
 			tw.tween_property(_night_modal, "modulate:a", 1.0, 0.35)
 		else:
 			_night_modal.modulate.a = 1.0
+	UIAssets.sync_bgm()
 
 
 func _hide_night_modal() -> void:
@@ -651,6 +665,7 @@ func _hide_night_modal() -> void:
 	var hud = get_tree().get_first_node_in_group("game_hud")
 	if hud and not is_waiting_for_day_start:
 		hud.visible = true
+	UIAssets.sync_bgm()
 
 
 func _unhandled_input(event: InputEvent) -> void:

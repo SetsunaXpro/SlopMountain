@@ -354,3 +354,211 @@ static func _apply_bus_volume(bus_name: String, linear_val: float) -> void:
 	var clamped := clampf(linear_val, 0.0, 1.0)
 	AudioServer.set_bus_mute(idx, clamped <= 0.005)
 	AudioServer.set_bus_volume_db(idx, linear_to_db(maxf(clamped, 0.0001)))
+
+
+# ---------------------------------------------------------------------------
+# Global BGM Music Manager (Attached lazily to SceneTree.root — zero project.godot edits)
+# ---------------------------------------------------------------------------
+
+const BGM_TRACKS := {
+	"menu":     {"path": "res://Music/f@ct Fun days (music or buy menu ost).wav",        "db": -8.0},
+	"gameplay": {"path": "res://Music/Rwi  Wavetones Pororoca(main gameplay music).wav", "db": -8.0},
+	"boss":     {"path": "res://Music/tdhr (Untitled) (boss fight ost).wav",             "db": -7.0},
+	"fail":     {"path": "res://Music/last flashback raymaster (run fail ost).wav",      "db": -7.0},
+}
+
+
+static func get_music_manager() -> Node:
+	var ml := Engine.get_main_loop()
+	if not (ml is SceneTree):
+		return null
+	var tree := ml as SceneTree
+	if tree.root == null:
+		return null
+	var mgr := tree.root.get_node_or_null("SlopMusicManager")
+	if mgr == null:
+		load_and_apply_settings()
+		mgr = MusicController.new()
+		mgr.name = "SlopMusicManager"
+		tree.root.call_deferred("add_child", mgr)
+		return mgr
+	return mgr
+
+
+static func sync_bgm() -> void:
+	var mgr := get_music_manager()
+	if mgr != null and mgr.has_method("request_sync"):
+		mgr.request_sync()
+
+
+static func play_bgm(track_key: String, fade_sec: float = 0.55) -> void:
+	var mgr := get_music_manager()
+	if mgr != null and mgr.has_method("play_track"):
+		mgr.play_track(track_key, fade_sec)
+
+
+class MusicController extends Node:
+	var _p_a: AudioStreamPlayer = null
+	var _p_b: AudioStreamPlayer = null
+	var _active_player: AudioStreamPlayer = null
+	var _current_track: String = ""
+	var _is_ducked: bool = false
+	var _fade_tween: Tween = null
+	var _duck_tween: Tween = null
+	var _stream_cache: Dictionary = {}
+	var _poll_accum: float = 0.0
+
+	func _ready() -> void:
+		process_mode = Node.PROCESS_MODE_ALWAYS
+		UIAssets.load_and_apply_settings()
+		_p_a = _make_player("BGMChannelA")
+		_p_b = _make_player("BGMChannelB")
+		_active_player = _p_a
+		call_deferred("_evaluate_and_apply")
+
+	func _make_player(n: String) -> AudioStreamPlayer:
+		var p := AudioStreamPlayer.new()
+		p.name = n
+		p.bus = "Music"
+		p.volume_db = -45.0
+		p.process_mode = Node.PROCESS_MODE_ALWAYS
+		p.finished.connect(func():
+			if p == _active_player and _current_track != "" and p.stream != null:
+				p.play()
+		)
+		add_child(p)
+		return p
+
+	func _process(delta: float) -> void:
+		_poll_accum += delta
+		if _poll_accum >= 0.15:
+			_poll_accum = 0.0
+			_evaluate_and_apply()
+
+	func request_sync() -> void:
+		if is_inside_tree():
+			call_deferred("_evaluate_and_apply")
+
+	func _is_group_visible(group_name: String) -> bool:
+		var tree := get_tree()
+		if tree == null:
+			return false
+		for n in tree.get_nodes_in_group(group_name):
+			if is_instance_valid(n) and not n.is_queued_for_deletion():
+				if n is CanvasLayer:
+					if n.visible:
+						return true
+				elif n is CanvasItem:
+					if n.visible:
+						return true
+				else:
+					return true
+		return false
+
+	func _get_first_active_in_group(group_name: String) -> Node:
+		var tree := get_tree()
+		if tree == null:
+			return null
+		for n in tree.get_nodes_in_group(group_name):
+			if is_instance_valid(n) and not n.is_queued_for_deletion():
+				return n
+		return null
+
+	func _evaluate_and_apply() -> void:
+		if not is_inside_tree():
+			return
+		var target_track: String = ""
+		var want_duck: bool = false
+
+		# 1. Title Screen always plays upbeat Menu/Outpost OST
+		if _is_group_visible("title_screen"):
+			target_track = "menu"
+		else:
+			var dnc := _get_first_active_in_group("day_night_cycle")
+			var dnc_state: String = ""
+			if dnc != null and dnc.has_method("get_music_state"):
+				dnc_state = str(dnc.get_music_state())
+
+			# 2. End-of-day Settlement Modals take priority over active gameplay
+			if dnc_state == "fail":
+				target_track = "fail"
+			elif dnc_state == "win":
+				target_track = "menu"
+			# 3. Contract Board (Boss Day -> Boss OST, Normal -> Menu/Outpost OST)
+			elif _is_group_visible("quota_menu"):
+				var qm := _get_first_active_in_group("quota_menu")
+				if qm != null and ("is_boss_day" in qm) and bool(qm.is_boss_day):
+					target_track = "boss"
+				else:
+					target_track = "menu"
+			# 4. Mod Shop / Heavy Machinery Workshop
+			elif _is_group_visible("buy_menu") or _is_group_visible("machine_buy_menu"):
+				target_track = "menu"
+			# 5. Active Gameplay (Boss/Event OST vs Main Gameplay OST)
+			elif dnc_state == "boss":
+				target_track = "boss"
+				want_duck = _is_group_visible("pause_menu")
+			elif dnc_state == "gameplay":
+				target_track = "gameplay"
+				want_duck = _is_group_visible("pause_menu")
+
+		if target_track != "" and target_track != _current_track:
+			play_track(target_track, 0.55)
+		if want_duck != _is_ducked:
+			_set_ducked(want_duck)
+
+	func _load_stream(track_key: String) -> AudioStream:
+		if _stream_cache.has(track_key):
+			return _stream_cache[track_key]
+		if not UIAssets.BGM_TRACKS.has(track_key):
+			return null
+		var path: String = str(UIAssets.BGM_TRACKS[track_key]["path"])
+		if not ResourceLoader.exists(path):
+			return null
+		var stream := load(path) as AudioStream
+		if stream != null:
+			_stream_cache[track_key] = stream
+		return stream
+
+	func play_track(track_key: String, fade_sec: float = 0.55) -> void:
+		if track_key == _current_track and _active_player != null and _active_player.playing:
+			return
+		var stream := _load_stream(track_key)
+		if stream == null:
+			return
+
+		var target_db: float = float(UIAssets.BGM_TRACKS[track_key].get("db", -8.0))
+		if _is_ducked:
+			target_db -= 6.0
+
+		var outgoing := _active_player
+		var incoming := _p_b if _active_player == _p_a else _p_a
+		_active_player = incoming
+		_current_track = track_key
+
+		incoming.stream = stream
+		incoming.volume_db = -42.0
+		incoming.play()
+
+		if _fade_tween != null and _fade_tween.is_valid():
+			_fade_tween.kill()
+		_fade_tween = create_tween()
+		_fade_tween.set_parallel(true)
+		_fade_tween.tween_property(incoming, "volume_db", target_db, fade_sec)
+		if outgoing != null and outgoing != incoming and outgoing.playing:
+			_fade_tween.tween_property(outgoing, "volume_db", -45.0, fade_sec)
+			_fade_tween.chain().tween_callback(func():
+				if outgoing != _active_player:
+					outgoing.stop()
+			)
+
+	func _set_ducked(duck: bool) -> void:
+		_is_ducked = duck
+		if _active_player == null or _current_track == "" or not UIAssets.BGM_TRACKS.has(_current_track):
+			return
+		var base_db: float = float(UIAssets.BGM_TRACKS[_current_track].get("db", -8.0))
+		var target_db: float = base_db - 6.0 if duck else base_db
+		if _duck_tween != null and _duck_tween.is_valid():
+			_duck_tween.kill()
+		_duck_tween = create_tween()
+		_duck_tween.tween_property(_active_player, "volume_db", target_db, 0.22)

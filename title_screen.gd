@@ -11,14 +11,11 @@ signal start_shift_pressed(mode: int)
 const UIAssets = preload("res://ui_assets.gd")
 const UIModals = preload("res://ui_modals.gd")
 
-const BGM_PATH := "res://Music/f@ct Fun days (music or buy menu ost).wav"
-
 var _root: Control = null
 var _content: Control = null
 var _logo_tex: TextureRect = null
 var _logo_base_y: float = 16.0
 var _anim_time: float = 0.0
-var _bgm_player: AudioStreamPlayer = null
 
 var _modal_overlay: Control = null
 var _active_popup: CanvasLayer = null
@@ -40,13 +37,12 @@ func _ready() -> void:
 	UIAssets.load_and_apply_settings()
 	_build_ui()
 	_connect_network_signals()
-	_start_bgm()
+	UIAssets.sync_bgm()
 
 
 func _exit_tree() -> void:
 	_disconnect_network_signals()
-	if is_instance_valid(_bgm_player):
-		_bgm_player.stop()
+	UIAssets.sync_bgm()
 
 
 func _process(delta: float) -> void:
@@ -60,27 +56,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_ESCAPE and is_instance_valid(_modal_overlay) and _modal_overlay.visible:
 			_modal_overlay.visible = false
 			get_viewport().set_input_as_handled()
-
-
-# ===========================================================================
-# Audio
-# ===========================================================================
-
-func _start_bgm() -> void:
-	if not ResourceLoader.exists(BGM_PATH):
-		return
-	var stream := load(BGM_PATH) as AudioStream
-	if stream == null:
-		return
-	if stream is AudioStreamWAV:
-		stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	_bgm_player = AudioStreamPlayer.new()
-	_bgm_player.name = "TitleBGM"
-	_bgm_player.stream = stream
-	_bgm_player.bus = "Music"
-	_bgm_player.volume_db = -8.0
-	add_child(_bgm_player)
-	_bgm_player.play()
 
 
 # ===========================================================================
@@ -750,9 +725,6 @@ func _create_ranger_modal_panel(panel_size: Vector2, _border_col: Color) -> Pane
 
 func _launch_game(mode: int) -> void:
 	emit_signal("start_shift_pressed", mode)
-	if is_instance_valid(_bgm_player):
-		var bgm_tw := create_tween()
-		bgm_tw.tween_property(_bgm_player, "volume_db", -40.0, 0.25)
 	var tw := create_tween()
 	tw.tween_property(_root, "modulate:a", 0.0, 0.28)
 	tw.tween_callback(func():
