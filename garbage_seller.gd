@@ -192,6 +192,8 @@ func _sell_all_garbage() -> void:
 	if _player_ref.has_method("_update_hud"):
 		_player_ref._update_hud()
 
+	NetworkManager.broadcast_team_sc(total_sc)
+
 	var msg := "💰 Sold %d item(s) for +%.1f SC!" % [total_items, total_sc]
 	if mult > 1.0:
 		msg += " (×%.1f streak bonus)" % mult

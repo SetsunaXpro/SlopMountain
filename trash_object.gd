@@ -16,6 +16,20 @@ func _ready() -> void:
 	add_to_group("trash")
 
 func collect() -> void:
+	if multiplayer.has_multiplayer_peer() and multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTED:
+		_rpc_collect.rpc()
+	else:
+		_do_collect()
+
+
+@rpc("any_peer", "call_local", "reliable")
+func _rpc_collect() -> void:
+	_do_collect()
+
+
+func _do_collect() -> void:
+	if is_queued_for_deletion():
+		return
 	collected.emit(item_id, collection_value)
 	print("Collected: %s (+%.1f SC)" % [item_id, collection_value])
 	queue_free()

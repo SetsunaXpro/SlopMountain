@@ -66,7 +66,7 @@ var held_object: RigidBody3D = null
 # ===========================================================================
 @export_group("Trash Bag & Inventory")
 ## Total SlopCredit (SC) score/currency collected
-@export var slop_credit: float = 0.0
+@export var slop_credit: float = 15.0
 ## Max items the trash bag can hold (0 = unlimited)
 @export var max_bag_capacity: int = 0
 ## Whether to generate the built-in HUD
@@ -99,12 +99,82 @@ var owned_perks: Array[String] = []
 ## Tracks which machines have been purchased / deployed
 var owned_machines: Array[String] = []
 
+# ===========================================================================
+# Machine Placement & Selection System (Keys 1-3 to select, C to build/place)
+# ===========================================================================
+const BUILDABLE_MACHINES: Array[Dictionary] = [
+	{
+		"id": "metal_crusher",
+		"name": "Metal Crusher",
+		"short_name": "Crusher",
+		"icon": "⚙️",
+		"scene_path": "res://metal_crusher.tscn",
+		"key": "1"
+	},
+	{
+		"id": "plastic_burner",
+		"name": "Plastic Burner",
+		"short_name": "Burner",
+		"icon": "🔥",
+		"scene_path": "res://plastic_burner.tscn",
+		"key": "2"
+	},
+	{
+		"id": "composter",
+		"name": "Composter",
+		"short_name": "Compost",
+		"icon": "🌱",
+		"scene_path": "res://composter.tscn",
+		"key": "3"
+	},
+	{
+		"id": "trap_hostile",
+		"name": "Hostile Trap",
+		"short_name": "H-Trap",
+		"icon": "🪤",
+		"scene_path": "res://trap_hostile.tscn",
+		"key": "4"
+	},
+	{
+		"id": "trap_peaceful",
+		"name": "Peaceful Trap",
+		"short_name": "P-Trap",
+		"icon": "🌿",
+		"scene_path": "res://trap_peaceful.tscn",
+		"key": "5"
+	}
+]
+
+const HOTBAR_GRID_SLOTS: int = 6
+var selected_hotbar_slot: int = 0
+var has_compass: bool = false
+var _compass_label: Label = null
+
+var placed_machines: Dictionary = {}
+var selected_machine_index: int = 0
+var is_building: bool = false
+var build_preview_node: Node3D = null
+var build_rotation_deg: float = 0.0
+var is_placement_valid: bool = false
+var build_target_position: Vector3 = Vector3.ZERO
+var _build_mat_valid: StandardMaterial3D = null
+var _build_mat_invalid: StandardMaterial3D = null
+
+# Hotbar UI references
+var _build_hotbar_container: HBoxContainer = null
+var _build_slot_panels: Array[PanelContainer] = []
+var _build_slot_labels: Array[Label] = []
+var _build_indicator_panel: PanelContainer = null
+var _build_indicator_lbl: Label = null
+
 # Buy Menu reference (Items / Mods)
 var buy_menu: BuyMenu = null
 # Machine Buy Menu reference (Machinery)
 var machine_menu: CanvasLayer = null
 # Quota Menu reference
 var quota_menu_instance: CanvasLayer = null
+# Pause Menu reference
+var pause_menu: CanvasLayer = null
 
 signal slop_credit_changed(total_sc: float, added_sc: float)
 signal item_bagged(item_id: String, value: float, total_sc: float)
@@ -173,8 +243,89 @@ var _hud_toast_tween: Tween = null
 var _action_bar: ProgressBar = null
 var _action_bar_style_fill: StyleBoxFlat = null
 
+# ===========================================================================
+# Co-op Multiplayer State
+# ===========================================================================
+var _net_pos: Vector3 = Vector3.ZERO
+var _net_rot_y: float = 0.0
+var _net_head_x: float = 0.0
+var _net_sync_timer: float = 0.0
+var _remote_name_label: Label3D = null
+
+
+func _is_local_player() -> bool:
+	return not multiplayer.has_multiplayer_peer() or is_multiplayer_authority()
+
+
+func _refresh_multiplayer_authority() -> void:
+	var is_local := _is_local_player()
+	var cam := head.get_node_or_null("Camera3D") as Camera3D
+	if cam:
+		cam.current = is_local
+	if pickup_ray:
+		pickup_ray.enabled = is_local
+
+	if is_local:
+		if not is_in_group("player"):
+			add_to_group("player")
+		if is_instance_valid(_remote_name_label):
+			_remote_name_label.visible = false
+		var local_visor := head.get_node_or_null("RemoteVisor")
+		if is_instance_valid(local_visor):
+			local_visor.visible = false
+	else:
+		if is_in_group("player"):
+			remove_from_group("player")
+		if is_instance_valid(game_hud):
+			game_hud.queue_free()
+			game_hud = null
+		if not is_instance_valid(_remote_name_label):
+			_remote_name_label = Label3D.new()
+			_remote_name_label.name = "RemoteNameLabel"
+			_remote_name_label.position = Vector3(0, 2.15, 0)
+			_remote_name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+			_remote_name_label.font_size = 36
+			_remote_name_label.outline_size = 8
+			add_child(_remote_name_label)
+		_remote_name_label.text = "Player %d" % get_multiplayer_authority()
+		_remote_name_label.visible = true
+
+		# Distinct body color & facing visor for remote co-op players
+		var body_mesh := get_node_or_null("Mesh") as MeshInstance3D
+		if body_mesh:
+			var peer_palette := [
+				Color(0.25, 0.72, 0.95),
+				Color(0.35, 0.88, 0.45),
+				Color(0.95, 0.55, 0.25),
+				Color(0.82, 0.42, 0.95),
+			]
+			var mat := StandardMaterial3D.new()
+			mat.albedo_color = peer_palette[abs(get_multiplayer_authority()) % peer_palette.size()]
+			body_mesh.material_override = mat
+
+		var visor := head.get_node_or_null("RemoteVisor") as MeshInstance3D
+		if not is_instance_valid(visor):
+			visor = MeshInstance3D.new()
+			visor.name = "RemoteVisor"
+			var v_mesh := BoxMesh.new()
+			v_mesh.size = Vector3(0.46, 0.16, 0.16)
+			visor.mesh = v_mesh
+			visor.position = Vector3(0, 0.0, -0.36)
+			var v_mat := StandardMaterial3D.new()
+			v_mat.albedo_color = Color(0.1, 0.14, 0.2)
+			visor.material_override = v_mat
+			head.add_child(visor)
+		visor.visible = true
+
 
 func _ready() -> void:
+	_net_pos = global_position
+	_net_rot_y = rotation.y
+	_net_head_x = head.rotation.x
+	add_to_group("players")
+	_refresh_multiplayer_authority()
+	if not _is_local_player():
+		return
 	check_input_mappings()
 	look_rotation.y = rotation.y
 	look_rotation.x = head.rotation.x
@@ -185,13 +336,33 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if not _is_local_player():
+		return
 	# Mouse controls
 	if event is InputEventMouseButton and event.pressed:
+		# Build mode interactions take precedence
+		if is_building:
+			if event.button_index == MOUSE_BUTTON_LEFT:
+				confirm_build_placement()
+				get_viewport().set_input_as_handled()
+				return
+			elif event.button_index == MOUSE_BUTTON_RIGHT:
+				cancel_build_mode()
+				get_viewport().set_input_as_handled()
+				return
+			elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
+				build_rotation_deg += deg_to_rad(15.0)
+				get_viewport().set_input_as_handled()
+				return
+			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				build_rotation_deg -= deg_to_rad(15.0)
+				get_viewport().set_input_as_handled()
+				return
+
 		# Left click: Capture mouse or handle non-hold interactions
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if not mouse_captured:
-				var dnc = get_tree().get_first_node_in_group("day_night_cycle")
-				if dnc and dnc.is_night and dnc._night_modal and dnc._night_modal.visible:
+				if is_any_menu_open():
 					return
 				capture_mouse()
 			else:
@@ -218,7 +389,23 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# Key controls
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_G:
+		if event.keycode == KEY_1 or event.keycode == KEY_KP_1:
+			_select_hotbar_slot(0)
+		elif event.keycode == KEY_2 or event.keycode == KEY_KP_2:
+			_select_hotbar_slot(1)
+		elif event.keycode == KEY_3 or event.keycode == KEY_KP_3:
+			_select_hotbar_slot(2)
+		elif event.keycode == KEY_4 or event.keycode == KEY_KP_4:
+			_select_hotbar_slot(3)
+		elif event.keycode == KEY_5 or event.keycode == KEY_KP_5:
+			_select_hotbar_slot(4)
+		elif event.keycode == KEY_6 or event.keycode == KEY_KP_6:
+			_select_hotbar_slot(5)
+		elif event.keycode == KEY_C:
+			toggle_build_mode()
+		elif event.keycode == KEY_R and is_building:
+			build_rotation_deg += deg_to_rad(45.0)
+		elif event.keycode == KEY_G:
 			toggle_equip_trash_grenade()
 		elif event.keycode == KEY_B:
 			toggle_buy_menu()
@@ -234,9 +421,24 @@ func _unhandled_input(event: InputEvent) -> void:
 	if InputMap.has_action(input_equip_trash) and event.is_action_pressed(input_equip_trash):
 		toggle_equip_trash_grenade()
 
-	# Escape releases mouse
+	# Escape releases mouse, cancels build mode, or toggles pause menu
 	if event.is_action_pressed("ui_cancel"):
-		release_mouse()
+		if is_building:
+			cancel_build_mode()
+			get_viewport().set_input_as_handled()
+			return
+		elif is_instance_valid(buy_menu):
+			toggle_buy_menu()
+		elif is_instance_valid(machine_menu):
+			toggle_machine_menu()
+		elif is_instance_valid(quota_menu_instance):
+			toggle_quota_menu()
+		elif is_instance_valid(pause_menu):
+			toggle_pause_menu()
+		elif not is_any_menu_open():
+			toggle_pause_menu()
+		else:
+			release_mouse()
 
 	# Look around
 	if mouse_captured and event is InputEventMouseMotion:
@@ -250,12 +452,33 @@ func _unhandled_input(event: InputEvent) -> void:
 			disable_freefly()
 
 
+func _process(delta: float) -> void:
+	if not _is_local_player():
+		return
+	if is_building:
+		_update_build_preview(delta)
+	_update_compass_hud()
+
+
 func _physics_process(delta: float) -> void:
+	if not _is_local_player():
+		var t := clampf(delta * 15.0, 0.0, 1.0)
+		global_position = global_position.lerp(_net_pos, t)
+		rotation.y = lerp_angle(rotation.y, _net_rot_y, t)
+		head.rotation.x = lerp_angle(head.rotation.x, _net_head_x, t)
+		return
+
 	update_held_object()
 	_process_action_cooldown(delta)
 	_process_hold_pickup(delta)
 	_process_end_day_hold(delta)
 	_update_aim_prompt()
+
+	if NetworkManager.is_multiplayer_active():
+		_net_sync_timer += delta
+		if _net_sync_timer >= 0.033:
+			_net_sync_timer = 0.0
+			_rpc_sync_state.rpc(global_position, rotation.y, head.rotation.x)
 
 	# If freeflying, handle freefly and nothing else
 	if can_freefly and freeflying:
@@ -743,6 +966,8 @@ func throw_object():
 		is_trash_grenade_equipped = false
 		equipped_trash_data = {}
 		_update_hud()
+		if NetworkManager.is_multiplayer_active() and not object.scene_file_path.is_empty():
+			NetworkManager.broadcast_throw_trash(object.scene_file_path, spawn_pos, object.global_rotation, object.linear_velocity * object.mass)
 	else:
 		# Standard drop/throw for regular physics props
 		var throw_direction = -head.global_basis.z
@@ -918,6 +1143,7 @@ func _setup_hud() -> void:
 	_hud_equipped_label.add_theme_font_size_override("font_size", 12)
 	vbox.add_child(_hud_equipped_label)
 
+	_setup_machine_hotbar(root)
 	_update_hud()
 
 
@@ -937,6 +1163,7 @@ func _hide_action_bar() -> void:
 
 
 func _update_hud() -> void:
+	_update_machine_hotbar()
 	if is_instance_valid(game_hud):
 		game_hud._refresh_inventory_from_player(self)
 
@@ -976,6 +1203,18 @@ func _show_feedback(msg: String) -> void:
 
 func _update_aim_prompt() -> void:
 	if not is_instance_valid(_hud_prompt_label):
+		return
+
+	# Build mode prompt takes priority
+	if is_building:
+		var m = BUILDABLE_MACHINES[selected_machine_index]
+		if is_placement_valid:
+			_hud_prompt_label.text = "[LMB / C] Place %s | [R / Wheel] Rotate | [RMB / ESC] Cancel" % m.name
+			_hud_prompt_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.5, 0.95))
+		else:
+			_hud_prompt_label.text = "⚠️ Cannot place here (Aim at flat floor) | [RMB / ESC] Cancel"
+			_hud_prompt_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.3, 0.95))
+		_hud_prompt_label.visible = true
 		return
 
 	# If currently holding N to end day early, keep that prompt visible
@@ -1063,6 +1302,8 @@ func _ensure_day_night_cycle() -> void:
 
 ## Toggle the buy shop open / closed (B key)
 func toggle_buy_menu() -> void:
+	if is_building:
+		cancel_build_mode()
 	if is_instance_valid(buy_menu):
 		# Already open — close it
 		buy_menu.queue_free()
@@ -1091,6 +1332,8 @@ func toggle_buy_menu() -> void:
 
 ## Toggle the Machine buy shop open / closed (M key)
 func toggle_machine_menu() -> void:
+	if is_building:
+		cancel_build_mode()
 	if is_instance_valid(machine_menu):
 		machine_menu.queue_free()
 		machine_menu = null
@@ -1123,6 +1366,8 @@ func _on_buy_menu_day_started() -> void:
 
 ## Toggle the Quota / Quest selection menu open / closed (Q key)
 func toggle_quota_menu() -> void:
+	if is_building:
+		cancel_build_mode()
 	if is_instance_valid(quota_menu_instance):
 		quota_menu_instance.queue_free()
 		quota_menu_instance = null
@@ -1156,3 +1401,629 @@ func _deferred_check_day_night_cycle() -> void:
 		var dnc = DayNightCycle.new()
 		dnc.name = "DayNightCycle"
 		get_tree().current_scene.add_child(dnc)
+
+
+## Checks if any modal UI (Title, Quota, Buy, Machine, Pause, Night settlement) is currently open
+func is_any_menu_open() -> bool:
+	var title = get_tree().get_first_node_in_group("title_screen")
+	if title and is_instance_valid(title) and title.is_inside_tree() and title.visible:
+		return true
+	if is_instance_valid(quota_menu_instance) and quota_menu_instance.is_inside_tree() and quota_menu_instance.visible:
+		return true
+	if is_instance_valid(buy_menu) and buy_menu.is_inside_tree() and buy_menu.visible:
+		return true
+	if is_instance_valid(machine_menu) and machine_menu.is_inside_tree() and machine_menu.visible:
+		return true
+	if is_instance_valid(pause_menu) and pause_menu.is_inside_tree() and pause_menu.visible:
+		return true
+	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
+	if dnc:
+		if dnc.is_waiting_for_day_start:
+			return true
+		if dnc.is_night and dnc._night_modal and dnc._night_modal.visible:
+			return true
+	return false
+
+
+## Toggles in-game Pause Menu
+func toggle_pause_menu() -> void:
+	if is_building:
+		cancel_build_mode()
+	if is_instance_valid(pause_menu):
+		pause_menu.queue_free()
+		pause_menu = null
+		capture_mouse()
+		return
+
+	release_mouse()
+
+	var pm := CanvasLayer.new()
+	pm.layer = 50
+	pm.name = "PauseMenu"
+
+	var root := Control.new()
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	pm.add_child(root)
+
+	var dim := ColorRect.new()
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0, 0, 0, 0.65)
+	root.add_child(dim)
+
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.offset_left = -220
+	panel.offset_right = 220
+	panel.offset_top = -220
+	panel.offset_bottom = 220
+
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.12, 0.14, 0.18, 0.96)
+	sb.border_color = Color(0.35, 0.65, 0.95)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(8)
+	sb.content_margin_left = 24
+	sb.content_margin_right = 24
+	sb.content_margin_top = 20
+	sb.content_margin_bottom = 20
+	panel.add_theme_stylebox_override("panel", sb)
+	root.add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	panel.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "PAUSED"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", Color(0.95, 0.85, 0.35))
+	vbox.add_child(title)
+
+	var resume_btn := Button.new()
+	resume_btn.text = "RESUME"
+	resume_btn.custom_minimum_size = Vector2(0, 36)
+	resume_btn.pressed.connect(func(): toggle_pause_menu())
+	vbox.add_child(resume_btn)
+
+	var q_btn := Button.new()
+	q_btn.text = "CONTRACT BOARD [Q]"
+	q_btn.custom_minimum_size = Vector2(0, 36)
+	q_btn.pressed.connect(func():
+		toggle_pause_menu()
+		toggle_quota_menu()
+	)
+	vbox.add_child(q_btn)
+
+	var b_btn := Button.new()
+	b_btn.text = "MOD SHOP [B]"
+	b_btn.custom_minimum_size = Vector2(0, 36)
+	b_btn.pressed.connect(func():
+		toggle_pause_menu()
+		toggle_buy_menu()
+	)
+	vbox.add_child(b_btn)
+
+	var title_btn := Button.new()
+	title_btn.text = "RETURN TO TITLE SCREEN"
+	title_btn.custom_minimum_size = Vector2(0, 36)
+	title_btn.pressed.connect(func():
+		toggle_pause_menu()
+		var existing_title = get_tree().get_first_node_in_group("title_screen")
+		if not existing_title:
+			var ts_script = load("res://title_screen.gd")
+			if ts_script:
+				var ts = ts_script.new()
+				get_tree().current_scene.add_child(ts)
+	)
+	vbox.add_child(title_btn)
+
+	var quit_btn := Button.new()
+	quit_btn.text = "QUIT TO DESKTOP"
+	quit_btn.custom_minimum_size = Vector2(0, 36)
+	quit_btn.pressed.connect(func(): get_tree().quit())
+	vbox.add_child(quit_btn)
+
+	get_tree().current_scene.add_child(pm)
+	pause_menu = pm
+
+
+# ===========================================================================
+# Machine Selection & Placement Logic (Num keys 1-3 & C to Build)
+# ===========================================================================
+
+func select_machine_by_id(mid: String) -> void:
+	for i in range(BUILDABLE_MACHINES.size()):
+		if BUILDABLE_MACHINES[i].id == mid:
+			select_machine(i)
+			return
+
+
+func select_machine(index: int) -> void:
+	if index < 0 or index >= BUILDABLE_MACHINES.size():
+		return
+	selected_machine_index = index
+	var m = BUILDABLE_MACHINES[selected_machine_index]
+	var owned_status := " [OWNED]" if is_machine_owned(m.id) else " [NOT OWNED - Press M to Buy]"
+	_show_feedback("[%s] Selected: %s %s%s" % [m.key, m.icon, m.name, owned_status])
+	_update_machine_hotbar()
+	if is_building:
+		_create_build_preview()
+
+
+func is_machine_owned(mid: String) -> bool:
+	return mid in owned_machines
+
+
+func toggle_build_mode() -> void:
+	if is_building:
+		confirm_build_placement()
+	else:
+		start_build_mode()
+
+
+func start_build_mode() -> void:
+	if selected_machine_index < 0 or selected_machine_index >= BUILDABLE_MACHINES.size():
+		selected_machine_index = 0
+
+	var m = BUILDABLE_MACHINES[selected_machine_index]
+	if not is_machine_owned(m.id):
+		_show_feedback("🔒 You do not own the %s yet! Press [M] to buy it." % m.name)
+		return
+
+	# Clear held object / grenade
+	if is_trash_grenade_equipped:
+		holster_equipped_grenade()
+	if held_object:
+		drop_object()
+
+	is_building = true
+	_create_build_preview()
+	_update_machine_hotbar()
+	_show_feedback("🔨 Build Mode: %s %s | Aim at floor & press [C] or [L-Click] to place" % [m.icon, m.name])
+
+
+func cancel_build_mode() -> void:
+	is_building = false
+	if is_instance_valid(build_preview_node):
+		build_preview_node.queue_free()
+		build_preview_node = null
+	_update_machine_hotbar()
+
+
+func confirm_build_placement() -> void:
+	if not is_building:
+		return
+
+	# Re-cast immediately to guarantee fresh placement coordinates at moment of click
+	_update_build_preview(0.0)
+
+	var m = BUILDABLE_MACHINES[selected_machine_index]
+	var mid: String = m.id
+
+	if not is_machine_owned(mid):
+		_show_feedback("🔒 %s is not owned!" % m.name)
+		cancel_build_mode()
+		return
+
+	if not is_placement_valid:
+		_show_feedback("⚠️ Cannot build here! Aim at a flat floor.")
+		return
+
+	var target_pos := build_target_position
+	var target_rot_y := build_rotation_deg
+
+	# Check if machine instance already exists in world (ignore any preview nodes)
+	var existing: Node3D = null
+	if placed_machines.has(mid) and is_instance_valid(placed_machines[mid]) and placed_machines[mid] != build_preview_node:
+		existing = placed_machines[mid]
+	else:
+		var candidates = get_tree().get_nodes_in_group(mid)
+		for cand in candidates:
+			if cand is Node3D and cand != build_preview_node and not cand.name.begins_with("BuildPreview_"):
+				existing = cand
+				break
+
+	if existing and is_instance_valid(existing):
+		# Relocate existing machine
+		existing.global_position = target_pos
+		existing.global_rotation = Vector3(0, target_rot_y, 0)
+		existing.visible = true
+		if "process_mode" in existing:
+			existing.process_mode = Node.PROCESS_MODE_INHERIT
+		placed_machines[mid] = existing
+		_show_feedback("📦 Relocated %s %s!" % [m.icon, m.name])
+	else:
+		# Spawn new machine instance into the world
+		var scene_path: String = m.scene_path
+		if ResourceLoader.exists(scene_path):
+			var packed = load(scene_path) as PackedScene
+			if packed:
+				var inst: Node3D = packed.instantiate()
+				inst.name = "Machine_%s" % mid
+				get_parent().add_child(inst)
+				inst.global_position = target_pos
+				inst.global_rotation = Vector3(0, target_rot_y, 0)
+				inst.add_to_group(mid)
+				placed_machines[mid] = inst
+				_show_feedback("🔨 Successfully built %s %s!" % [m.icon, m.name])
+
+	# Tween pop effect on placed machine
+	if placed_machines.has(mid) and is_instance_valid(placed_machines[mid]):
+		var node = placed_machines[mid]
+		var orig_scale = Vector3.ONE
+		node.scale = orig_scale * 0.75
+		var tw = create_tween()
+		tw.tween_property(node, "scale", orig_scale, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+	NetworkManager.broadcast_place_machine(mid, m.scene_path, target_pos, target_rot_y)
+
+	cancel_build_mode()
+
+
+func _create_build_preview() -> void:
+	if is_instance_valid(build_preview_node):
+		build_preview_node.queue_free()
+		build_preview_node = null
+
+	if selected_machine_index < 0 or selected_machine_index >= BUILDABLE_MACHINES.size():
+		return
+
+	var m = BUILDABLE_MACHINES[selected_machine_index]
+	var scene_path: String = m.scene_path
+	if not ResourceLoader.exists(scene_path):
+		return
+
+	var packed = load(scene_path) as PackedScene
+	if not packed:
+		return
+
+	build_preview_node = packed.instantiate()
+	build_preview_node.name = "BuildPreview_" + m.id
+
+	# Disable collisions, monitoring, and machine scripts on preview node
+	if build_preview_node is Area3D:
+		build_preview_node.monitoring = false
+		build_preview_node.monitorable = false
+	if build_preview_node is CollisionObject3D:
+		build_preview_node.collision_layer = 0
+		build_preview_node.collision_mask = 0
+
+	for col in build_preview_node.find_children("*", "CollisionShape3D", true, false):
+		if col is CollisionShape3D:
+			col.disabled = true
+
+	for col_obj in build_preview_node.find_children("*", "CollisionObject3D", true, false):
+		if col_obj is CollisionObject3D:
+			col_obj.collision_layer = 0
+			col_obj.collision_mask = 0
+			if col_obj is Area3D:
+				col_obj.monitoring = false
+				col_obj.monitorable = false
+
+	for lbl in build_preview_node.find_children("*", "Label3D", true, false):
+		if lbl is Label3D:
+			lbl.visible = false
+
+	# Disable processing
+	build_preview_node.process_mode = Node.PROCESS_MODE_DISABLED
+
+	_apply_preview_material(build_preview_node, true)
+	get_parent().add_child(build_preview_node)
+
+	# Crucial: remove from all gameplay groups AFTER add_child (since _ready adds to groups)
+	build_preview_node.remove_from_group("machines")
+	build_preview_node.remove_from_group(m.id)
+
+
+func _update_build_preview(_delta: float) -> void:
+	if not is_instance_valid(build_preview_node):
+		return
+
+	var space_state := get_world_3d().direct_space_state
+	var cam := get_viewport().get_camera_3d()
+	if not cam:
+		cam = head.get_node_or_null("Camera3D") as Camera3D
+
+	var from_pos: Vector3
+	var forward_dir: Vector3
+	var max_build_dist: float = 14.0
+
+	if cam:
+		var mouse_pos: Vector2
+		if Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
+			mouse_pos = get_viewport().get_visible_rect().size / 2.0
+		else:
+			mouse_pos = get_viewport().get_mouse_position()
+
+		from_pos = cam.project_ray_origin(mouse_pos)
+		forward_dir = cam.project_ray_normal(mouse_pos)
+	else:
+		from_pos = head.global_position
+		forward_dir = -head.global_transform.basis.z.normalized()
+
+	var to_pos: Vector3 = from_pos + forward_dir * max_build_dist
+
+	var query := PhysicsRayQueryParameters3D.create(from_pos, to_pos)
+	var excludes: Array[RID] = [get_rid()]
+	if build_preview_node is CollisionObject3D:
+		excludes.append(build_preview_node.get_rid())
+	for child in build_preview_node.find_children("*", "CollisionObject3D", true, false):
+		if child is CollisionObject3D:
+			excludes.append(child.get_rid())
+	query.exclude = excludes
+	query.collision_mask = 1 # Ground / world terrain
+
+	# Penetrate through collectible trash objects to hit the actual floor/ground underneath
+	var hit: Dictionary = {}
+	for _attempt in range(6):
+		hit = space_state.intersect_ray(query)
+		if hit and not hit.is_empty():
+			var collider_obj = hit.collider
+			if is_trash_object(collider_obj):
+				if collider_obj is CollisionObject3D:
+					excludes.append(collider_obj.get_rid())
+					query.exclude = excludes
+					continue
+			break
+		else:
+			break
+
+	if hit and not hit.is_empty():
+		build_target_position = hit.position
+		var is_flat: bool = hit.normal.dot(Vector3.UP) > 0.65
+		var dist_valid: bool = from_pos.distance_to(build_target_position) >= 1.2
+		is_placement_valid = is_flat and dist_valid
+	else:
+		var projected: Vector3 = from_pos + forward_dir * 5.0
+		projected.y = global_position.y
+		build_target_position = projected
+		is_placement_valid = false
+
+	build_preview_node.global_position = build_target_position
+	build_preview_node.global_rotation = Vector3(0, build_rotation_deg, 0)
+	_apply_preview_material(build_preview_node, is_placement_valid)
+
+
+func _get_build_material(valid: bool) -> StandardMaterial3D:
+	if _build_mat_valid == null:
+		_build_mat_valid = StandardMaterial3D.new()
+		_build_mat_valid.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_build_mat_valid.albedo_color = Color(0.2, 0.95, 0.35, 0.55)
+		_build_mat_valid.emission_enabled = true
+		_build_mat_valid.emission = Color(0.1, 0.7, 0.25)
+		_build_mat_valid.emission_energy_multiplier = 0.6
+		_build_mat_valid.cull_mode = BaseMaterial3D.CULL_DISABLED
+
+	if _build_mat_invalid == null:
+		_build_mat_invalid = StandardMaterial3D.new()
+		_build_mat_invalid.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_build_mat_invalid.albedo_color = Color(0.95, 0.25, 0.25, 0.55)
+		_build_mat_invalid.emission_enabled = true
+		_build_mat_invalid.emission = Color(0.8, 0.1, 0.1)
+		_build_mat_invalid.emission_energy_multiplier = 0.6
+		_build_mat_invalid.cull_mode = BaseMaterial3D.CULL_DISABLED
+
+	return _build_mat_valid if valid else _build_mat_invalid
+
+
+func _apply_preview_material(node: Node, valid: bool) -> void:
+	var mat = _get_build_material(valid)
+	_apply_mat_recursive(node, mat)
+
+
+func _apply_mat_recursive(node: Node, mat: Material) -> void:
+	if node is GeometryInstance3D:
+		node.material_override = mat
+	elif node is CSGPrimitive3D:
+		node.material = mat
+	for child in node.get_children():
+		_apply_mat_recursive(child, mat)
+
+
+func _setup_machine_hotbar(root: Control) -> void:
+	_build_hotbar_container = HBoxContainer.new()
+	_build_hotbar_container.name = "MachineHotbar"
+	_build_hotbar_container.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_build_hotbar_container.alignment = BoxContainer.ALIGNMENT_CENTER
+	_build_hotbar_container.offset_top = -68.0
+	_build_hotbar_container.offset_bottom = -20.0
+	_build_hotbar_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_build_hotbar_container.add_theme_constant_override("separation", 10)
+	root.add_child(_build_hotbar_container)
+
+	_build_slot_panels.clear()
+	_build_slot_labels.clear()
+
+	# Create 6 empty inventory grid slots (1 to 6) at bottom-center
+	for i in range(HOTBAR_GRID_SLOTS):
+		var panel = PanelContainer.new()
+		panel.custom_minimum_size = Vector2(96, 48)
+		panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+		var lbl = Label.new()
+		lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lbl.add_theme_font_size_override("font_size", 12)
+		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(lbl)
+
+		_build_hotbar_container.add_child(panel)
+		_build_slot_panels.append(panel)
+		_build_slot_labels.append(lbl)
+
+	# Compass HUD Indicator (shown when Tracker Compass is owned)
+	_compass_label = Label.new()
+	_compass_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_compass_label.position = Vector2(-190, 96)
+	_compass_label.size = Vector2(380, 28)
+	_compass_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_compass_label.add_theme_font_size_override("font_size", 14)
+	_compass_label.add_theme_color_override("font_color", Color(0.45, 0.95, 1.0))
+	_compass_label.visible = false
+	_compass_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(_compass_label)
+
+	# Build Action Indicator Slot (C key)
+	_build_indicator_panel = PanelContainer.new()
+	_build_indicator_panel.custom_minimum_size = Vector2(130, 44)
+	_build_indicator_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	_build_indicator_lbl = Label.new()
+	_build_indicator_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_build_indicator_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_build_indicator_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_build_indicator_lbl.add_theme_font_size_override("font_size", 13)
+	_build_indicator_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_build_indicator_panel.add_child(_build_indicator_lbl)
+
+	_build_hotbar_container.add_child(_build_indicator_panel)
+
+
+func _get_hotbar_items() -> Array[Dictionary]:
+	var items: Array[Dictionary] = []
+	for mid in owned_machines:
+		if mid == "critter_compass":
+			continue
+		for m in BUILDABLE_MACHINES:
+			if m.id == mid:
+				items.append(m)
+				break
+	return items
+
+
+func _select_hotbar_slot(slot_idx: int) -> void:
+	if slot_idx < 0 or slot_idx >= HOTBAR_GRID_SLOTS:
+		return
+	selected_hotbar_slot = slot_idx
+	var items := _get_hotbar_items()
+	if slot_idx < items.size():
+		select_machine_by_id(items[slot_idx].id)
+	else:
+		if is_building:
+			cancel_build_mode()
+		_update_machine_hotbar()
+
+
+func _update_compass_hud() -> void:
+	if not is_instance_valid(_compass_label):
+		return
+	var compass_owned := has_compass or ("critter_compass" in owned_machines)
+	if not compass_owned:
+		_compass_label.visible = false
+		return
+
+	var nearest: Node3D = null
+	var best_dist := INF
+	for mob in get_tree().get_nodes_in_group("event_mobs"):
+		if mob is Node3D and is_instance_valid(mob):
+			var d := global_position.distance_to(mob.global_position)
+			if d < best_dist:
+				best_dist = d
+				nearest = mob
+
+	_compass_label.visible = true
+	if nearest == null:
+		_compass_label.text = "🧭 COMPASS: No active event mob"
+		_compass_label.add_theme_color_override("font_color", Color(0.65, 0.72, 0.78))
+		return
+
+	var to_mob := nearest.global_position - global_position
+	to_mob.y = 0.0
+	var fwd := -head.global_basis.z
+	fwd.y = 0.0
+	var right := head.global_basis.x
+	right.y = 0.0
+	var dot_f := fwd.normalized().dot(to_mob.normalized())
+	var dot_r := right.normalized().dot(to_mob.normalized())
+	var arrow := "⬆️"
+	if dot_f > 0.65:
+		arrow = "⬆️ AHEAD"
+	elif dot_f < -0.65:
+		arrow = "⬇️ BEHIND"
+	elif dot_r > 0.35:
+		arrow = "↗️ RIGHT" if dot_f > 0.0 else "↘️ BACK-R"
+	elif dot_r < -0.35:
+		arrow = "↖️ LEFT" if dot_f > 0.0 else "↙️ BACK-L"
+	_compass_label.text = "🧭 MOB: %dm  [%s]" % [int(round(best_dist)), arrow]
+	_compass_label.add_theme_color_override("font_color", Color(0.45, 0.95, 1.0))
+
+
+func _update_machine_hotbar() -> void:
+	if not is_instance_valid(_build_hotbar_container):
+		return
+
+	var items := _get_hotbar_items()
+	for i in range(HOTBAR_GRID_SLOTS):
+		if i >= _build_slot_panels.size() or i >= _build_slot_labels.size():
+			continue
+
+		var panel = _build_slot_panels[i]
+		var lbl = _build_slot_labels[i]
+		var is_sel = (i == selected_hotbar_slot)
+
+		var style := StyleBoxFlat.new()
+		style.corner_radius_top_left = 6
+		style.corner_radius_top_right = 6
+		style.corner_radius_bottom_left = 6
+		style.corner_radius_bottom_right = 6
+
+		if i < items.size():
+			var m = items[i]
+			lbl.text = "[%d] %s\n%s" % [i + 1, m.icon, m.get("short_name", m.name)]
+			if is_sel:
+				style.bg_color = Color(0.18, 0.16, 0.08, 0.92)
+				style.border_color = Color(1.0, 0.85, 0.25, 1.0)
+				style.set_border_width_all(2)
+				lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.45))
+			else:
+				style.bg_color = Color(0.08, 0.10, 0.14, 0.82)
+				style.border_color = Color(0.28, 0.35, 0.42, 0.7)
+				style.set_border_width_all(1)
+				lbl.add_theme_color_override("font_color", Color(0.85, 0.90, 0.95))
+		else:
+			lbl.text = "[%d]" % (i + 1)
+			style.bg_color = Color(0.05, 0.06, 0.08, 0.55)
+			style.border_color = Color(0.28, 0.30, 0.36, 0.6) if is_sel else Color(0.18, 0.20, 0.24, 0.45)
+			style.set_border_width_all(1)
+			lbl.add_theme_color_override("font_color", Color(0.40, 0.42, 0.48))
+
+		panel.add_theme_stylebox_override("panel", style)
+
+	# Update Build indicator slot
+	if is_instance_valid(_build_indicator_panel) and is_instance_valid(_build_indicator_lbl):
+		var style := StyleBoxFlat.new()
+		style.corner_radius_top_left = 6
+		style.corner_radius_top_right = 6
+		style.corner_radius_bottom_left = 6
+		style.corner_radius_bottom_right = 6
+
+		if is_building:
+			_build_indicator_lbl.text = "🔨 [C] PLACE"
+			_build_indicator_lbl.add_theme_color_override("font_color", Color(0.25, 1.0, 0.5))
+			style.bg_color = Color(0.06, 0.22, 0.10, 0.95)
+			style.border_color = Color(0.25, 1.0, 0.5, 1.0)
+			style.set_border_width_all(2)
+		elif selected_hotbar_slot < items.size():
+			_build_indicator_lbl.text = "[C] BUILD"
+			_build_indicator_lbl.add_theme_color_override("font_color", Color(0.65, 0.9, 1.0))
+			style.bg_color = Color(0.08, 0.14, 0.22, 0.85)
+			style.border_color = Color(0.28, 0.55, 0.85, 0.85)
+			style.set_border_width_all(1)
+		else:
+			_build_indicator_lbl.text = "[M] SHOP"
+			_build_indicator_lbl.add_theme_color_override("font_color", Color(0.55, 0.58, 0.65))
+			style.bg_color = Color(0.06, 0.08, 0.10, 0.7)
+			style.border_color = Color(0.2, 0.25, 0.3, 0.5)
+			style.set_border_width_all(1)
+
+		_build_indicator_panel.add_theme_stylebox_override("panel", style)
+
+
+@rpc("authority", "call_remote", "unreliable_ordered")
+func _rpc_sync_state(pos: Vector3, rot_y: float, head_x: float) -> void:
+	_net_pos = pos
+	_net_rot_y = rot_y
+	_net_head_x = head_x

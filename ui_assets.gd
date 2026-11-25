@@ -46,13 +46,15 @@ static func create_texture_rect(res_path: String, expand: bool = false) -> Textu
 	return tr
 
 
-## Creates a Button styled with a Texture background (normal, hover, pressed, disabled)
-## Enforces exact 1:1 pixel dimensions so textures are NEVER stretched.
+## Creates a Button styled with Texture backgrounds.
+## Preserves backward-compatible parameter order: (res_path, title_text, font_size, font_col, hover_path, custom_size)
 static func create_textured_button(
 	res_path: String,
 	title_text: String = "",
 	font_size: int = 15,
-	font_col: Color = Color.WHITE
+	font_col: Color = Color.WHITE,
+	hover_path: String = "",
+	custom_size: Vector2 = Vector2.ZERO
 ) -> Button:
 	var btn := Button.new()
 	btn.text = title_text
@@ -64,33 +66,52 @@ static func create_textured_button(
 	btn.add_theme_color_override("font_disabled_color", Color(0.5, 0.5, 0.5, 0.7))
 
 	var tex := get_tex(res_path)
+	var hov_tex: Texture2D = null
+	if hover_path != "":
+		hov_tex = get_tex(hover_path)
+
 	if tex:
-		var tex_sz := tex.get_size()
-		btn.custom_minimum_size = tex_sz
-		btn.size = tex_sz
+		var target_size := custom_size if custom_size != Vector2.ZERO else tex.get_size()
+		btn.custom_minimum_size = target_size
+		btn.size = target_size
 
 		var sb_norm := StyleBoxTexture.new()
 		sb_norm.texture = tex
 		btn.add_theme_stylebox_override("normal", sb_norm)
 
 		var sb_hov := StyleBoxTexture.new()
-		sb_hov.texture = tex
-		sb_hov.modulate_color = Color(1.15, 1.15, 1.15)
+		if hov_tex != null:
+			sb_hov.texture = hov_tex
+		else:
+			sb_hov.texture = tex
+			sb_hov.modulate_color = Color(1.15, 1.15, 1.15)
 		btn.add_theme_stylebox_override("hover", sb_hov)
 
 		var sb_press := StyleBoxTexture.new()
-		sb_press.texture = tex
+		sb_press.texture = hov_tex if hov_tex != null else tex
 		sb_press.modulate_color = Color(0.85, 0.85, 0.85)
 		btn.add_theme_stylebox_override("pressed", sb_press)
 
 		var sb_dis := StyleBoxTexture.new()
 		sb_dis.texture = tex
-		sb_dis.modulate_color = Color(0.70, 0.68, 0.65, 0.90)
+		sb_dis.modulate_color = Color(0.70, 0.68, 0.65, 0.80)
 		btn.add_theme_stylebox_override("disabled", sb_dis)
 		btn.add_theme_color_override("font_disabled_color", Color(0.48, 0.44, 0.40, 0.95))
 
 		var sb_foc := StyleBoxTexture.new()
-		sb_foc.texture = tex
+		sb_foc.texture = hov_tex if hov_tex != null else tex
 		btn.add_theme_stylebox_override("focus", sb_foc)
 
 	return btn
+
+
+## Dedicated helper for buttons with explicit normal and hover texture paths
+static func create_hover_button(
+	normal_path: String,
+	hover_path: String,
+	title_text: String = "",
+	font_size: int = 15,
+	font_col: Color = Color.WHITE,
+	custom_size: Vector2 = Vector2.ZERO
+) -> Button:
+	return create_textured_button(normal_path, title_text, font_size, font_col, hover_path, custom_size)

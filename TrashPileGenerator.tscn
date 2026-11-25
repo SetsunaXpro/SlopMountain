@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://bkbgh432kfsml"]
 
-[ext_resource type="Script" uid="uid://dk1aqt0knp1fw" path="res://TrashPileGenerator.cs" id="1_ln5oc"]
+[ext_resource type="Script" path="res://trash_pile_generator.gd" id="1_ln5oc"]
 
 [node name="TrashPileGenerator" type="Node3D" unique_id=1788260618]
 script = ExtResource("1_ln5oc")

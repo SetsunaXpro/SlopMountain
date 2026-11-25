@@ -32,6 +32,11 @@ var perks_panel: Control = null
 var _inventory_slots: Array = []
 var _perk_slot_widgets: Array = []
 
+var event_panel: PanelContainer = null
+var event_title_label: Label = null
+var event_sub_label: Label = null
+var event_hp_bar: ProgressBar = null
+
 # Live values
 var current_quota_val: float = 0.0
 var max_quota_val: float = 100.0
@@ -97,6 +102,13 @@ func _process(_delta: float) -> void:
 			end_day_btn.text = "🌅 END DAY [N]"
 			end_day_btn.modulate = Color(1.0, 0.85, 0.4)
 
+	# Sync EventSystem state if active
+	if dnc and "event_system" in dnc and dnc.event_system:
+		var es = dnc.event_system
+		if es.has_signal("event_started") and not es.event_started.is_connected(_on_event_started):
+			_connect_event_system(es)
+		_update_event_display(es)
+
 
 func _build_hud_layout() -> void:
 	var root := Control.new()
@@ -113,6 +125,10 @@ func _build_hud_layout() -> void:
 
 	end_day_btn = _create_end_day_button()
 	root.add_child(end_day_btn)
+
+	# 2b. Top-Center Special Event Banner
+	event_panel = _create_event_panel()
+	root.add_child(event_panel)
 
 	# 3. Top-Right: Streak Counter Panel (167 x 171)
 	root.add_child(_create_streak_panel())
@@ -145,6 +161,8 @@ func _deferred_connect() -> void:
 			dnc.day_started.connect(Callable(self, "_on_dnc_day_started"))
 		if dnc.has_signal("night_started"):
 			dnc.night_started.connect(Callable(self, "_on_dnc_night_started"))
+		if "event_system" in dnc and dnc.event_system:
+			_connect_event_system(dnc.event_system)
 
 
 # ===========================================================================
@@ -538,6 +556,147 @@ func _refresh_inventory_from_player(player: Node) -> void:
 				slot_widget.set_item(InventorySlotWidget.ItemType.OTHER, id_str.to_upper())
 		else:
 			slot_widget.set_empty()
+
+
+# ===========================================================================
+# Event HUD Panel & System Integration
+# ===========================================================================
+func _create_event_panel() -> PanelContainer:
+	event_panel = PanelContainer.new()
+	event_panel.name = "EventHUDPanel"
+	event_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	event_panel.offset_left = -190
+	event_panel.offset_right = 190
+	event_panel.offset_top = 118
+	event_panel.custom_minimum_size = Vector2(380, 52)
+	event_panel.visible = false
+
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.08, 0.08, 0.12, 0.90)
+	sb.border_color = Color(0.95, 0.35, 0.25, 0.9)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(6)
+	sb.content_margin_left = 12
+	sb.content_margin_right = 12
+	sb.content_margin_top = 6
+	sb.content_margin_bottom = 6
+	event_panel.add_theme_stylebox_override("panel", sb)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 2)
+	event_panel.add_child(vbox)
+
+	event_title_label = Label.new()
+	event_title_label.text = "EVENT TITLE"
+	event_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	event_title_label.add_theme_font_size_override("font_size", 12)
+	event_title_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.40))
+	vbox.add_child(event_title_label)
+
+	event_sub_label = Label.new()
+	event_sub_label.text = "Objective status..."
+	event_sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	event_sub_label.add_theme_font_size_override("font_size", 10)
+	event_sub_label.add_theme_color_override("font_color", COL_TEXT_LIGHT)
+	vbox.add_child(event_sub_label)
+
+	event_hp_bar = ProgressBar.new()
+	event_hp_bar.custom_minimum_size = Vector2(350, 8)
+	event_hp_bar.min_value = 0.0
+	event_hp_bar.max_value = 100.0
+	event_hp_bar.value = 100.0
+	event_hp_bar.show_percentage = false
+	var sb_bg := StyleBoxFlat.new()
+	sb_bg.bg_color = Color(0.15, 0.15, 0.20, 0.8)
+	sb_bg.set_corner_radius_all(3)
+	event_hp_bar.add_theme_stylebox_override("background", sb_bg)
+	var sb_fill := StyleBoxFlat.new()
+	sb_fill.bg_color = Color(0.90, 0.25, 0.20, 1.0)
+	sb_fill.set_corner_radius_all(3)
+	event_hp_bar.add_theme_stylebox_override("fill", sb_fill)
+	vbox.add_child(event_hp_bar)
+
+	return event_panel
+
+
+func _connect_event_system(es: Node) -> void:
+	if not es.event_started.is_connected(_on_event_started):
+		es.event_started.connect(_on_event_started)
+	if not es.event_progress_updated.is_connected(_on_event_progress_updated):
+		es.event_progress_updated.connect(_on_event_progress_updated)
+	if not es.event_completed.is_connected(_on_event_completed):
+		es.event_completed.connect(_on_event_completed)
+
+
+func _on_event_started(event_data: Dictionary) -> void:
+	if not is_instance_valid(event_panel):
+		return
+	event_panel.visible = true
+	var is_challenge := false
+	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
+	if dnc and "event_system" in dnc and dnc.event_system and "current_game_mode" in dnc.event_system:
+		is_challenge = (dnc.event_system.current_game_mode == 1)
+
+	var title: String = event_data.get("title", "EVENT")
+	if is_challenge:
+		event_title_label.text = "🔥 CHALLENGE: " + title
+		event_title_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.30))
+	else:
+		event_title_label.text = "★ " + title
+		event_title_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.40))
+
+	event_sub_label.text = event_data.get("desc", "")
+	event_sub_label.add_theme_color_override("font_color", COL_TEXT_LIGHT)
+	var target: float = float(event_data.get("quota_target", 1.0))
+	var unit: String = event_data.get("target_unit", "")
+	if unit == "HP":
+		event_hp_bar.visible = true
+		event_hp_bar.max_value = target
+		event_hp_bar.value = target
+	elif unit == "FLAG":
+		event_hp_bar.visible = false
+		event_sub_label.text = "🚩 Tancapkan Bendera di tiang puncak tertinggi!"
+	elif unit == "HEARTS":
+		event_hp_bar.visible = true
+		event_hp_bar.max_value = target
+		event_hp_bar.value = 0.0
+		event_sub_label.text = "🐾 Beri 3 camilan organik untuk menjinakkan (0/3)"
+	elif unit == "SC":
+		event_hp_bar.visible = true
+		event_hp_bar.max_value = target
+		event_hp_bar.value = 0.0
+		event_sub_label.text = "💰 Jual sampah & produk daur ulang ($0 / $25 SC)"
+	else:
+		event_hp_bar.visible = false
+
+
+func _on_event_progress_updated(cur: float, target: float, status_text: String) -> void:
+	if not is_instance_valid(event_panel):
+		return
+	if status_text != "":
+		event_sub_label.text = status_text
+	if event_hp_bar.visible:
+		event_hp_bar.max_value = target
+		event_hp_bar.value = cur
+
+
+func _on_event_completed(event_id: String) -> void:
+	if not is_instance_valid(event_panel):
+		return
+	event_title_label.text = "🎉 EVENT COMPLETED!"
+	event_sub_label.text = "Target terpenuhi! Siap pulang saat senja."
+	event_sub_label.add_theme_color_override("font_color", Color(0.4, 1.0, 0.6))
+	if is_instance_valid(event_hp_bar):
+		event_hp_bar.visible = false
+
+
+func _update_event_display(es: Node) -> void:
+	if not is_instance_valid(event_panel):
+		return
+	if not es.is_event_active:
+		event_panel.visible = false
+	else:
+		event_panel.visible = true
 
 
 # ===========================================================================

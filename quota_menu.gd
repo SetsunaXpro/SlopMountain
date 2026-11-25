@@ -1,85 +1,79 @@
 # quota_menu.gd
-# Quota / Contract selection screen presented before each day starts.
-# Uses raw HD UI textures in res://UI/02_shop/ and res://UI/03_cards/
+# Contract Board / Quota selection screen presented before each day starts.
+# Accurately reproduces Mockup 2 (Inspection Day Boss Event) and Mockup 3 (Standard Contract Board)
+# using raw HD UI textures in res://UI/02_shop/ and res://UI/03_cards/
 
-class_name QuotaMenu extends CanvasLayer
-
-const UIAssets = preload("res://ui_assets.gd")
+class_name QuotaMenu
+extends CanvasLayer
 
 signal day_started(contract_data: Dictionary)
 signal contract_selected(contract_data: Dictionary)
 
-# ---------------------------------------------------------------------------
-# Colors
-# ---------------------------------------------------------------------------
-const C_AMBER          := Color(0.88, 0.62, 0.12, 1.0)
-const C_WHITE          := Color(1.0, 1.0, 1.0, 1.0)
+const UIAssets = preload("res://ui_assets.gd")
 
-const REROLL_COST: int = 2
 const MAX_DAYS: int = 8
 
-# ---------------------------------------------------------------------------
-# Predefined Quota/Quest templates
-# ---------------------------------------------------------------------------
-const BOSS_MODIFIERS: Array[Dictionary] = [
-	{
-		"title": "Inspection Day",
-		"desc": "Inspektur Mossy memeriksa! Kuota ketat sebelum senja tiba.",
-		"quota_mult": 2.2,
-		"serial": "SCRAP-ID // 08-PIGGY",
-		"icon": "boss"
-	},
-	{
-		"title": "Toxic Inspection",
-		"desc": "Sampah berbahaya terdeteksi! Kuota x2.0, fokus amankan danau.",
-		"quota_mult": 2.0,
-		"serial": "SCRAP-ID // 09-TOXIC",
-		"icon": "toxic"
-	},
-	{
-		"title": "Scrap Rush Day",
-		"desc": "Hari sibuk outpost! Selesaikan kuota berat untuk bonus patroli.",
-		"quota_mult": 1.8,
-		"serial": "SCRAP-ID // 10-RUSH",
-		"icon": "rush"
-	}
-]
+# Colors
+const COL_WHITE        := Color(1.0, 1.0, 1.0, 1.0)
+const COL_DARK_TEXT    := Color(0.18, 0.14, 0.12, 1.0)
+const COL_AMBER        := Color(0.96, 0.65, 0.15, 1.0)
+const COL_RED          := Color(0.85, 0.22, 0.18, 1.0)
+const COL_BLUE         := Color(0.18, 0.58, 0.92, 1.0)
+const COL_GREEN        := Color(0.20, 0.68, 0.35, 1.0)
+const COL_MUTED        := Color(0.48, 0.44, 0.40, 1.0)
 
-# ---------------------------------------------------------------------------
 # State
-# ---------------------------------------------------------------------------
 var _player = null
 var _dnc: DayNightCycle = null
 
-var _cards_data: Array[Dictionary] = []
-var _selected_index: int = 0
-var _card_nodes: Array[Control] = []
-var _card_selection_glows: Array[ReferenceRect] = []
-var _skip_buttons: Array[Button] = []
-var _boss_btn: Button = null
+var is_boss_day: bool = false
+var active_event_data: Dictionary = {}
+var _selected_index: int = 1 # Standard contract selected by default
+var _contracts_data: Array[Dictionary] = []
+var _contract_nodes: Array[Control] = []
+var _selection_glows: Array[ReferenceRect] = []
+var _pilih_buttons: Array[Button] = []
 
-var _sc_label: Label = null
+# Top bar widgets
 var _day_label: Label = null
-var _dlg_label: Label = null
-var _root: Control = null
-var _cards_hbox: HBoxContainer = null
+var _boss_tag_label: Label = null
+var _funds_label: Label = null
 
-# ---------------------------------------------------------------------------
-# Lifecycle
-# ---------------------------------------------------------------------------
+# Bottom bar widgets
+var _dialogue_label: Label = null
+var _start_shift_btn: Button = null
+
+var _root: Control = null
+var _content: Control = null
+var _papers_container: Control = null
+
 
 func _ready() -> void:
 	layer = 20
-	_resolve_references()
-	_init_cards_data()
-	_build_ui()
-	_refresh_header()
-	_update_card_selection_visuals()
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
-	# Hide GameHUD while quota menu is open
+	_resolve_references()
+	_determine_day_type()
+	_init_contracts_data()
+	_build_ui()
+	_refresh_top_bar()
+	_update_contract_selection_visuals()
+
+	# Hide HUD while contract board is open
 	var hud = get_tree().get_first_node_in_group("game_hud")
 	if hud:
 		hud.visible = false
+
+	if NetworkManager.is_multiplayer_active():
+		if not NetworkManager.quota_votes_updated.is_connected(_refresh_vote_ui):
+			NetworkManager.quota_votes_updated.connect(_refresh_vote_ui)
+		if not NetworkManager.quota_vote_finalized.is_connected(_on_coop_vote_finalized):
+			NetworkManager.quota_vote_finalized.connect(_on_coop_vote_finalized)
+		if NetworkManager.is_host():
+			NetworkManager.reset_quota_votes()
+		NetworkManager.submit_quota_vote(_selected_index)
+		_refresh_vote_ui()
 
 
 func _exit_tree() -> void:
@@ -95,548 +89,864 @@ func _resolve_references() -> void:
 		_dnc = get_tree().get_first_node_in_group("day_night_cycle")
 
 
-# ---------------------------------------------------------------------------
-# Data Initialization
-# ---------------------------------------------------------------------------
+func _determine_day_type() -> void:
+	var day := 1
+	if _dnc != null:
+		day = _dnc.current_day
 
-func _init_cards_data() -> void:
+	active_event_data = {}
+	var es: Node = null
+	if _dnc and "event_system" in _dnc and _dnc.event_system:
+		es = _dnc.event_system
+	else:
+		es = get_tree().get_first_node_in_group("event_system")
+
+	if es and es.is_event_day(day):
+		is_boss_day = true
+		active_event_data = es.get_event_data_for_day(day)
+	else:
+		# Fallback if no EventSystem present
+		is_boss_day = (day % 4 == 0)
+		if is_boss_day:
+			active_event_data = {
+				"id": "inspection_day",
+				"tag": "INSPECTION DAY",
+				"subtag": "BOSS EVENT · DAY %d\n! WAJIB / TIDAK BISA SKIP" % day,
+				"title": "EVENT: SURPRISE AUDIT",
+				"desc": "Semua jenis sampah (Haul) — Sidak Kebersihan",
+				"rule_warning": "▲ ATURAN BOSS: SALAH TONG = -20 KG KUOTA!\nSetiap salah sortir mereset Streak & memotong progres kg.",
+				"payout": 18,
+				"reward": "★ 1× Summit Stamp (+0.05 Mult)",
+				"icon": "res://UI/03_cards/icon_contract_audit.png",
+				"quota_target": 480.0,
+				"target_unit": "KG",
+				"dialogue": "The Inspector: \"Hari ini event wajib! Penuhi kuota audit atau Taman Nasional resmi ditutup!\""
+			}
+
+
+func _init_contracts_data() -> void:
+	var current_day := 1
 	var base_q: float = 15.0
-	if _dnc != null and _dnc.has_method("get_current_quota"):
+	if _dnc != null:
+		current_day = _dnc.current_day
 		base_q = _dnc.get_current_quota()
 
-	_cards_data.clear()
+	_contracts_data.clear()
 
-	# Card 1: Low quota (Standard / Easy)
-	_cards_data.append({
-		"title": "Low quota",
-		"rarity": "COMMON",
-		"cost_badge": "$4",
-		"upper_text": "Multiplier bonus naik +0.15 per sampah yang disortir benar.",
-		"lower_text": "Dapatkan +15p SlopCredit",
-		"serial": "SCRAP-ID // 01-VEST",
-		"quota_target": maxf(10.0, base_q * 0.8),
-		"skip_reward": 15.0,
-		"is_boss": false,
-		"is_skipped": false,
-		"icon": "quota_low"
-	})
+	if is_boss_day:
+		var event_id: String = active_event_data.get("id", "inspection_day")
+		var event_tag: String = active_event_data.get("tag", "INSPECTION DAY")
+		var event_subtag: String = active_event_data.get("subtag", "BOSS EVENT · DAY %d\n! WAJIB / TIDAK BISA SKIP" % current_day)
+		var event_title: String = active_event_data.get("title", "EVENT: SURPRISE AUDIT")
+		var event_desc: String = active_event_data.get("desc", "Semua jenis sampah (Haul) — Sidak Kebersihan")
+		var rule_warn: String = active_event_data.get("rule_warning", "▲ ATURAN BOSS: SALAH TONG = -20 KG KUOTA!")
+		var payout_amt: int = active_event_data.get("payout", 20)
+		var reward_str: String = active_event_data.get("reward", "★ 1× Summit Stamp (+0.05 Mult)")
+		var icon_p: String = active_event_data.get("icon", "res://UI/03_cards/icon_contract_audit.png")
+		var quota_tgt: float = active_event_data.get("quota_target", maxf(480.0, base_q * 2.8))
+		var t_unit: String = active_event_data.get("target_unit", "KG")
 
-	# Card 2: Low quota / Balanced quota
-	_cards_data.append({
-		"title": "Low quota",
-		"rarity": "COMMON",
-		"cost_badge": "$4",
-		"upper_text": "Multiplier bonus naik +0.15 per sampah yang disortir benar.",
-		"lower_text": "Dapatkan +15p SlopCredit",
-		"serial": "SCRAP-ID // 02-CRUSH",
-		"quota_target": base_q,
-		"skip_reward": 15.0,
-		"is_boss": false,
-		"is_skipped": false,
-		"icon": "quota_mid"
-	})
+		_contracts_data.append({
+			"id": event_id,
+			"type": "BOSS",
+			"tag": event_tag,
+			"subtag": event_subtag,
+			"quota_target": quota_tgt,
+			"target_unit": t_unit,
+			"time_str": "02:30",
+			"icon": icon_p,
+			"title": event_title,
+			"desc": event_desc,
+			"rule_warning": rule_warn,
+			"payout": payout_amt,
+			"boss_reward": reward_str,
+			"bg_tex": "res://UI/03_cards/contract_torn_boss_red_empty.png",
+			"btn_tex": "res://UI/02_shop/btn_contract_boss_red_wood.png",
+			"btn_text": "✓ KONTRAK %s WAJIB" % event_tag,
+			"dialogue": active_event_data.get("dialogue", ""),
+			"is_boss": true
+		})
+		_selected_index = 0
+	else:
+		# Standard 3-Contract Board (Mockup 3)
+		# 1. Easy / Low Quota
+		var easy_q := maxf(15.0, roundf(base_q * 0.8))
+		_contracts_data.append({
+			"type": "EASY",
+			"tag": "LOW QUOTA",
+			"subtag": "EASY ×0.8",
+			"quota_target": easy_q,
+			"time_str": "02:30",
+			"icon": "res://UI/03_cards/icon_contract_haul.png",
+			"title": "MISI: HAUL",
+			"desc": "Semua jenis sampah",
+			"condition_title": "CUACA",
+			"condition_desc": "Cerah (aman)",
+			"payout": 5,
+			"stamp_reward": "1× Trailhead",
+			"bg_tex": "res://UI/03_cards/contract_torn_easy_empty.png",
+			"tag_color": COL_GREEN,
+			"is_boss": false
+		})
 
-	# Card 3: Inspection Day (Boss quota - cannot skip, can reroll)
-	var boss_template: Dictionary = BOSS_MODIFIERS[0]
-	_cards_data.append({
-		"title": boss_template["title"],
-		"rarity": "COMMON",
-		"cost_badge": "$4",
-		"upper_text": boss_template["desc"],
-		"lower_text": "Target Kuota: %.0f KG" % (base_q * float(boss_template["quota_mult"])),
-		"serial": boss_template["serial"],
-		"quota_target": base_q * float(boss_template["quota_mult"]),
-		"skip_reward": 0.0,
-		"is_boss": true,
-		"is_skipped": false,
-		"icon": "boss",
-		"boss_idx": 0
-	})
+		# 2. Standard / Tin Tally (Selected by default)
+		var std_q := maxf(20.0, roundf(base_q * 1.0))
+		_contracts_data.append({
+			"type": "STANDARD",
+			"tag": "STANDARD",
+			"subtag": "NORMAL ×1.0\n✓ DIPILIH",
+			"quota_target": std_q,
+			"time_str": "02:30",
+			"icon": "res://UI/03_cards/icon_contract_metal.png",
+			"title": "MISI: TIN TALLY",
+			"desc": "Khusus sampah logam",
+			"condition_title": "MEDAN",
+			"condition_desc": "Normal",
+			"payout": 8,
+			"stamp_reward": "1× Tin Stamp",
+			"bg_tex": "res://UI/03_cards/contract_torn_standard_empty.png",
+			"tag_color": COL_BLUE,
+			"is_boss": false
+		})
 
+		# 3. High Quota / Compost Run
+		var hard_q := maxf(30.0, roundf(base_q * 1.4))
+		_contracts_data.append({
+			"type": "HARD",
+			"tag": "HIGH QUOTA",
+			"subtag": "HARD ×1.4",
+			"quota_target": hard_q,
+			"time_str": "02:30",
+			"icon": "res://UI/03_cards/icon_contract_organic.png",
+			"title": "MISI: COMPOST RUN",
+			"desc": "Khusus sampah organik",
+			"condition_warning": "▲ ANGIN KENCANG (+$2)\nSampah ringan mudah terbang",
+			"payout": 14,
+			"stamp_reward": "2× Compost",
+			"bg_tex": "res://UI/03_cards/contract_torn_hard_empty.png",
+			"tag_color": COL_RED,
+			"is_boss": false
+		})
+		_selected_index = 1
 
-# ---------------------------------------------------------------------------
-# UI Construction
-# ---------------------------------------------------------------------------
 
 func _build_ui() -> void:
-	var font: Font = ThemeDB.fallback_font
-
 	_root = Control.new()
-	_root.name = "QuotaRoot"
+	_root.name = "ContractBoardRoot"
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_root)
 
-	# 1280 x 720 centered canvas container
-	var content := Control.new()
-	content.name = "Content"
-	content.set_anchors_preset(Control.PRESET_CENTER)
-	content.offset_left = -640
-	content.offset_right = 640
-	content.offset_top = -360
-	content.offset_bottom = 360
-	content.custom_minimum_size = Vector2(1280, 720)
-	content.size = Vector2(1280, 720)
-	_root.add_child(content)
+	# 1280 x 720 Centered Content Canvas
+	_content = Control.new()
+	_content.name = "Content"
+	_content.set_anchors_preset(Control.PRESET_CENTER)
+	_content.offset_left = -640
+	_content.offset_right = 640
+	_content.offset_top = -360
+	_content.offset_bottom = 360
+	_content.custom_minimum_size = Vector2(1280, 720)
+	_content.size = Vector2(1280, 720)
+	_root.add_child(_content)
 
-	# Full-screen HD Backdrop & Workbench Background (1280 x 720)
-	var bg_tex := UIAssets.create_texture_rect("res://UI/02_shop/shop_bg_full.png")
-	bg_tex.position = Vector2.ZERO
-	bg_tex.size = Vector2(1280, 720)
-	content.add_child(bg_tex)
+	# 1. Fullscreen Wall Background
+	var wall_path := "res://UI/02_shop/bg_boss_wall.png" if is_boss_day else "res://UI/02_shop/bg_dawn_wall.png"
+	var wall_bg := UIAssets.create_texture_rect(wall_path)
+	wall_bg.position = Vector2.ZERO
+	wall_bg.size = Vector2(1280, 720)
+	_content.add_child(wall_bg)
 
-	# --- TOP HEADER BAR ----------------------------------------------------
-	# Funds Plate (Left: 186 x 52)
-	var funds_bg := UIAssets.create_texture_rect("res://UI/02_shop/shop_header_funds_bg.png")
-	funds_bg.position = Vector2(32, 12)
-	funds_bg.size = Vector2(186, 52)
-	content.add_child(funds_bg)
+	# 2. Ranger Corkboard (1200 x 562)
+	var corkboard := UIAssets.create_texture_rect("res://UI/02_shop/ranger_corkboard.png")
+	corkboard.position = Vector2(40, 76)
+	corkboard.size = Vector2(1200, 562)
+	_content.add_child(corkboard)
 
-	_sc_label = Label.new()
-	_sc_label.text = "$0"
-	_sc_label.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_sc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_sc_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_sc_label.add_theme_color_override("font_color", Color(0.96, 0.85, 0.25))
-	_sc_label.add_theme_font_size_override("font_size", 18)
-	funds_bg.add_child(_sc_label)
+	# 3. Top Header Bar
+	_build_top_header()
 
-	# Outpost Title Plate (Center: 586 x 52)
-	var title_bg := UIAssets.create_texture_rect("res://UI/02_shop/shop_header_title_bg.png")
-	title_bg.position = Vector2(347, 12)
-	title_bg.size = Vector2(586, 52)
-	content.add_child(title_bg)
+	# 4. Corkboard Papers (Either 1 Boss Paper or 3 Standard Papers)
+	_papers_container = Control.new()
+	_papers_container.name = "PapersContainer"
+	_papers_container.position = Vector2(40, 76)
+	_papers_container.size = Vector2(1200, 562)
+	_content.add_child(_papers_container)
 
-	var title_lbl := Label.new()
-	title_lbl.text = "MOSSY'S JUNKYARD OUTPOST"
-	title_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
-	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title_lbl.add_theme_color_override("font_color", Color(0.95, 0.92, 0.88))
-	title_lbl.add_theme_font_size_override("font_size", 20)
-	title_bg.add_child(title_lbl)
+	if is_boss_day:
+		_build_boss_paper()
+	else:
+		_build_standard_papers()
 
-	# Day Plate (Right: 186 x 52)
-	var day_bg := UIAssets.create_texture_rect("res://UI/02_shop/shop_header_day_bg.png")
-	day_bg.position = Vector2(1062, 12)
-	day_bg.size = Vector2(186, 52)
-	content.add_child(day_bg)
+	# 5. Bottom Dialogue Strip & Start Shift Button
+	_build_bottom_bar()
+
+
+# ===========================================================================
+# Top Header Bar
+# ===========================================================================
+func _build_top_header() -> void:
+	# 1. Left Plate: DAY 0X / 08 (216 x 48)
+	var day_plate := UIAssets.create_texture_rect("res://UI/02_shop/plate_day_bg.png")
+	day_plate.position = Vector2(48, 16)
+	day_plate.size = Vector2(216, 48)
+	_content.add_child(day_plate)
 
 	_day_label = Label.new()
-	_day_label.text = "DAY 1 / 8"
+	_day_label.text = "DAY 01 / 08"
 	_day_label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_day_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_day_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_day_label.add_theme_color_override("font_color", Color(0.88, 0.90, 0.94))
 	_day_label.add_theme_font_size_override("font_size", 16)
-	day_bg.add_child(_day_label)
+	_day_label.add_theme_color_override("font_color", Color(0.92, 0.94, 0.98))
+	day_plate.add_child(_day_label)
 
-	# --- DIALOGUE STRIP (886 x 48) -----------------------------------------
-	var dlg_bg := UIAssets.create_texture_rect("res://UI/02_shop/shop_dialogue_bg.png")
-	dlg_bg.position = Vector2(197, 72)
-	dlg_bg.size = Vector2(886, 48)
-	content.add_child(dlg_bg)
+	# 2. Center Slab Header (440 x 58)
+	var header_slab_tex := "res://UI/02_shop/header_slab_boss_bg.png" if is_boss_day else "res://UI/02_shop/header_slab_contract_bg.png"
+	var header_slab := UIAssets.create_texture_rect(header_slab_tex)
+	header_slab.position = Vector2(420, 14)
+	header_slab.size = Vector2(440, 58)
+	_content.add_child(header_slab)
 
-	_dlg_label = Label.new()
-	_dlg_label.text = "🐸 Mossy: \"Pilih target kuota sebelum senja tiba, Ranger!\""
-	_dlg_label.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_dlg_label.offset_left = 20
-	_dlg_label.offset_right = -20
-	_dlg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_dlg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_dlg_label.add_theme_color_override("font_color", Color(0.86, 0.84, 0.78))
-	_dlg_label.add_theme_font_size_override("font_size", 15)
-	dlg_bg.add_child(_dlg_label)
+	var header_title := Label.new()
+	var tag_title: String = active_event_data.get("tag", "INSPECTION DAY") if is_boss_day else "CONTRACT BOARD"
+	header_title.text = tag_title
+	header_title.set_anchors_preset(Control.PRESET_FULL_RECT)
+	header_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	header_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	header_title.add_theme_font_size_override("font_size", 18)
+	header_title.add_theme_color_override("font_color", Color(0.96, 0.95, 0.90) if is_boss_day else Color(0.20, 0.16, 0.12))
+	header_slab.add_child(header_title)
 
-	# --- MAIN CARDS CONTAINER (OVER WORKBENCH) -----------------------------
-	_cards_hbox = HBoxContainer.new()
-	_cards_hbox.position = Vector2(252, 128)
-	_cards_hbox.custom_minimum_size = Vector2(775, 490)
-	_cards_hbox.size = Vector2(775, 490)
-	_cards_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	_cards_hbox.add_theme_constant_override("separation", 32)
-	content.add_child(_cards_hbox)
+	# 3. Right Plate: Split Boss / Funds plate (284 x 48)
+	var split_plate := UIAssets.create_texture_rect("res://UI/02_shop/plate_boss_cash_split_bg.png")
+	split_plate.position = Vector2(948, 16)
+	split_plate.size = Vector2(284, 48)
+	_content.add_child(split_plate)
 
-	_render_cards()
-
-	# --- BOTTOM BAR --------------------------------------------------------
-	# Shop Shortcut Button (Left: 246 x 58)
-	var shop_btn := UIAssets.create_textured_button(
-		"res://UI/02_shop/btn_reroll_bg.png",
-		"🛍️ MOD SHOP [B]",
-		15,
-		Color.WHITE
-	)
-	shop_btn.position = Vector2(32, 646)
-	shop_btn.custom_minimum_size = Vector2(246, 58)
-	shop_btn.size = Vector2(246, 58)
-	shop_btn.pressed.connect(_on_shop_pressed)
-	content.add_child(shop_btn)
-
-	# Machine Shop Shortcut Button (Center-Left: 246 x 58)
-	var mach_btn := UIAssets.create_textured_button(
-		"res://UI/02_shop/btn_reroll_bg.png",
-		"⚙️ MACHINES [M]",
-		15,
-		Color.WHITE
-	)
-	mach_btn.position = Vector2(298, 646)
-	mach_btn.custom_minimum_size = Vector2(246, 58)
-	mach_btn.size = Vector2(246, 58)
-	mach_btn.pressed.connect(_on_mach_pressed)
-	content.add_child(mach_btn)
-
-	# START DAY Button (Right: 246 x 58)
-	var start_btn := UIAssets.create_textured_button(
-		"res://UI/02_shop/btn_start_day_bg.png",
-		"START DAY →",
-		17,
-		Color.WHITE
-	)
-	start_btn.position = Vector2(1002, 646)
-	start_btn.custom_minimum_size = Vector2(246, 58)
-	start_btn.size = Vector2(246, 58)
-	start_btn.pressed.connect(_on_start_day_pressed)
-	content.add_child(start_btn)
-
-
-# ---------------------------------------------------------------------------
-# Card Construction
-# ---------------------------------------------------------------------------
-
-func _render_cards() -> void:
-	if not is_instance_valid(_cards_hbox):
-		return
-	for child in _cards_hbox.get_children():
-		child.queue_free()
-
-	_card_nodes.clear()
-	_card_selection_glows.clear()
-	_skip_buttons.clear()
-	_boss_btn = null
-
-	for i in range(_cards_data.size()):
-		var data: Dictionary = _cards_data[i]
-		var card := _build_single_card(i, data)
-		_cards_hbox.add_child(card)
-
-
-func _build_single_card(card_idx: int, data: Dictionary) -> Control:
-	var card_column := Control.new()
-	card_column.custom_minimum_size = Vector2(237, 470)
-	card_column.size = Vector2(237, 470)
-	card_column.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	card_column.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_card_nodes.append(card_column)
-
-	# Card base container (237 x 382)
-	var card_base := Control.new()
-	card_base.position = Vector2(0, 0)
-	card_base.custom_minimum_size = Vector2(237, 382)
-	card_base.size = Vector2(237, 382)
-	card_column.add_child(card_base)
-
-	# 1. Base HD Card Texture (237 x 382)
-	var card_bg := UIAssets.create_texture_rect("res://UI/03_cards/card_blind_base_empty.png")
-	card_bg.position = Vector2.ZERO
-	card_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card_base.add_child(card_bg)
-
-	# Selection Glow Frame
-	var glow := ReferenceRect.new()
-	glow.set_anchors_preset(Control.PRESET_FULL_RECT)
-	glow.border_color = Color(0.96, 0.74, 0.18, 1.0)
-	glow.border_width = 4.0
-	glow.editor_only = false
-	glow.visible = (card_idx == _selected_index)
-	card_base.add_child(glow)
-	_card_selection_glows.append(glow)
-
-	# Click overlay to select card
-	var click_btn := Button.new()
-	click_btn.set_anchors_preset(Control.PRESET_FULL_RECT)
-	click_btn.flat = true
-	click_btn.mouse_filter = Control.MOUSE_FILTER_PASS
-	click_btn.pressed.connect(_on_card_clicked.bind(card_idx))
-	card_base.add_child(click_btn)
-
-	# 2. Rarity Tape (Top-Left: 96 x 42) — Text is baked on texture
-	var rarity_str: String = str(data.get("rarity", "COMMON")).to_lower()
-	var tape_path := "res://UI/03_cards/tape_rarity_%s.png" % rarity_str
-	var tape_tex := UIAssets.create_texture_rect(tape_path)
-	tape_tex.position = Vector2(4, 2)
-	tape_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card_base.add_child(tape_tex)
-
-	# 3. Gold Stamp Badge (Top-Right: 51 x 51)
-	var stamp_tex := UIAssets.create_texture_rect("res://UI/03_cards/card_stamp_gold_empty.png")
-	stamp_tex.position = Vector2(178, 2)
-	stamp_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card_base.add_child(stamp_tex)
-
-	var badge_lbl := Label.new()
-	badge_lbl.text = str(data.get("cost_badge", "$4"))
-	badge_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
-	badge_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	badge_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	badge_lbl.add_theme_color_override("font_color", Color(0.14, 0.10, 0.05))
-	badge_lbl.add_theme_font_size_override("font_size", 14)
-	stamp_tex.add_child(badge_lbl)
-
-	# 4. Blueprint Art Area Icon (x: 25, y: 50, w: 186, h: 122)
-	var icon_lbl := Label.new()
-	var icon_hint := str(data.get("icon", ""))
-	var icon_char := "📋"
-	match icon_hint:
-		"quota_low":
-			icon_char = "⚖️"
-		"quota_mid":
-			icon_char = "📋"
-		"boss":
-			icon_char = "🔍"
-		"toxic":
-			icon_char = "☣️"
-		"rush":
-			icon_char = "🚀"
-	icon_lbl.text = icon_char
-	icon_lbl.position = Vector2(25, 60)
-	icon_lbl.size = Vector2(186, 100)
-	icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	icon_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	icon_lbl.add_theme_font_size_override("font_size", 42)
-	card_base.add_child(icon_lbl)
-
-	# 5. Title Banner (y: 182..214)
-	var title_lbl := Label.new()
-	title_lbl.text = str(data.get("title", "Low quota"))
-	title_lbl.position = Vector2(18, 184)
-	title_lbl.size = Vector2(201, 30)
-	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title_lbl.add_theme_color_override("font_color", Color(0.95, 0.92, 0.88))
-	title_lbl.add_theme_font_size_override("font_size", 15)
-	card_base.add_child(title_lbl)
-
-	# 6. Upper White Box: Modifier / Condition (y: 224..276)
-	var up_box := MarginContainer.new()
-	up_box.position = Vector2(24, 224)
-	up_box.custom_minimum_size = Vector2(189, 52)
-	up_box.size = Vector2(189, 52)
-
-	var up_lbl := Label.new()
-	up_lbl.text = str(data.get("upper_text", ""))
-	up_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	up_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	up_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	up_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	up_lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	up_lbl.add_theme_color_override("font_color", Color(0.14, 0.14, 0.16))
-	up_lbl.add_theme_font_size_override("font_size", 11)
-	up_box.add_child(up_lbl)
-	card_base.add_child(up_box)
-
-	# 7. OR Divider text (y: 278..290)
-	var or_lbl := Label.new()
-	or_lbl.text = "OR"
-	or_lbl.position = Vector2(20, 276)
-	or_lbl.size = Vector2(197, 16)
-	or_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	or_lbl.add_theme_color_override("font_color", Color(0.35, 0.28, 0.20))
-	or_lbl.add_theme_font_size_override("font_size", 10)
-	card_base.add_child(or_lbl)
-
-	# 8. Lower White Box: Skip / Bonus payout (y: 294..366)
-	var low_box := MarginContainer.new()
-	low_box.position = Vector2(24, 294)
-	low_box.custom_minimum_size = Vector2(189, 72)
-	low_box.size = Vector2(189, 72)
-
-	var low_lbl := Label.new()
-	low_lbl.text = str(data.get("lower_text", "Dapatkan +15p SlopCredit"))
-	low_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	low_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	low_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	low_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	low_lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	low_lbl.add_theme_color_override("font_color", Color(0.14, 0.14, 0.16))
-	low_lbl.add_theme_font_size_override("font_size", 11)
-	low_box.add_child(low_lbl)
-	card_base.add_child(low_box)
-
-	# 9. Action Button (Positioned directly under card base at y: 396)
-	var is_boss: bool = bool(data.get("is_boss", false))
-	var is_skipped: bool = bool(data.get("is_skipped", false))
-
-	if not is_boss:
-		var skip_btn := UIAssets.create_textured_button(
-			"res://UI/02_shop/btn_yellow_bg.png",
-			"SKIPPED" if is_skipped else "Skip",
-			15,
-			Color(0.14, 0.10, 0.05)
-		)
-		skip_btn.position = Vector2(30.5, 396)
-		skip_btn.custom_minimum_size = Vector2(176, 42)
-		skip_btn.size = Vector2(176, 42)
-		skip_btn.disabled = is_skipped
-		if is_skipped:
-			skip_btn.modulate = Color(0.5, 0.5, 0.5, 0.8)
-		else:
-			skip_btn.pressed.connect(_on_skip_pressed.bind(card_idx))
-		card_column.add_child(skip_btn)
-		_skip_buttons.append(skip_btn)
+	_boss_tag_label = Label.new()
+	_boss_tag_label.position = Vector2(10, 0)
+	_boss_tag_label.size = Vector2(160, 48)
+	_boss_tag_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_boss_tag_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var is_challenge := false
+	if _dnc != null and "event_system" in _dnc and _dnc.event_system and "current_game_mode" in _dnc.event_system:
+		is_challenge = (_dnc.event_system.current_game_mode == 1)
+	if is_challenge:
+		_boss_tag_label.text = "🔥 CHALLENGE"
+		_boss_tag_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.30))
 	else:
-		_boss_btn = UIAssets.create_textured_button(
-			"res://UI/02_shop/btn_reroll_bg.png",
-			"🎲 REROLL ($%d)" % REROLL_COST,
-			14,
-			Color.WHITE
+		_boss_tag_label.text = ("▲ %s" % active_event_data.get("tag", "EVENT")) if is_boss_day else "▲ BOSS: DAY 8"
+		_boss_tag_label.add_theme_color_override("font_color", Color(0.96, 0.40, 0.35) if is_boss_day else Color(0.96, 0.65, 0.20))
+	_boss_tag_label.add_theme_font_size_override("font_size", 12)
+	split_plate.add_child(_boss_tag_label)
+
+	_funds_label = Label.new()
+	_funds_label.position = Vector2(180, 0)
+	_funds_label.size = Vector2(94, 48)
+	_funds_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_funds_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_funds_label.text = "$14"
+	_funds_label.add_theme_font_size_override("font_size", 16)
+	_funds_label.add_theme_color_override("font_color", Color(0.98, 0.88, 0.25))
+	split_plate.add_child(_funds_label)
+
+
+# ===========================================================================
+# Standard 3 Contracts (Mockup 3)
+# ===========================================================================
+func _build_standard_papers() -> void:
+	_contract_nodes.clear()
+	_selection_glows.clear()
+	_pilih_buttons.clear()
+
+	var positions := [Vector2(45, 24), Vector2(415, 14), Vector2(805, 24)]
+	var sizes := [Vector2(365, 498), Vector2(390, 518), Vector2(365, 512)]
+
+	for i in range(_contracts_data.size()):
+		var data: Dictionary = _contracts_data[i]
+		var paper_pos: Vector2 = positions[i]
+		var paper_size: Vector2 = sizes[i]
+
+		var card := Control.new()
+		card.position = paper_pos
+		card.custom_minimum_size = paper_size
+		card.size = paper_size
+		_papers_container.add_child(card)
+		_contract_nodes.append(card)
+
+		# Paper Texture
+		var bg_tex := UIAssets.create_texture_rect(data["bg_tex"])
+		bg_tex.position = Vector2.ZERO
+		bg_tex.size = paper_size
+		card.add_child(bg_tex)
+
+		# Selection border highlight around the middle / selected contract
+		var glow := ReferenceRect.new()
+		glow.set_anchors_preset(Control.PRESET_FULL_RECT)
+		glow.border_color = Color(0.20, 0.65, 0.98, 1.0)
+		glow.border_width = 3.0
+		glow.editor_only = false
+		glow.visible = (i == _selected_index)
+		card.add_child(glow)
+		_selection_glows.append(glow)
+
+		# Click area to select contract
+		var click_btn := Button.new()
+		click_btn.set_anchors_preset(Control.PRESET_FULL_RECT)
+		click_btn.flat = true
+		click_btn.mouse_filter = Control.MOUSE_FILTER_PASS
+		click_btn.pressed.connect(_on_contract_selected.bind(i))
+		card.add_child(click_btn)
+
+		# Content layout inside paper
+		var pad_x: float = 28.0
+		var eff_w: float = paper_size.x - (pad_x * 2.0)
+
+		# 1. Tag (Top-Left)
+		var tag_panel := PanelContainer.new()
+		tag_panel.position = Vector2(pad_x, 32)
+		tag_panel.custom_minimum_size = Vector2(96, 26)
+		var sb_tag := StyleBoxFlat.new()
+		sb_tag.bg_color = Color(0, 0, 0, 0)
+		sb_tag.border_color = data.get("tag_color", COL_BLUE)
+		sb_tag.set_border_width_all(2)
+		sb_tag.set_corner_radius_all(4)
+		sb_tag.content_margin_left = 6
+		sb_tag.content_margin_right = 6
+		tag_panel.add_theme_stylebox_override("panel", sb_tag)
+
+		var tag_lbl := Label.new()
+		tag_lbl.text = data["tag"]
+		tag_lbl.add_theme_font_size_override("font_size", 11)
+		tag_lbl.add_theme_color_override("font_color", data.get("tag_color", COL_BLUE))
+		tag_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		tag_panel.add_child(tag_lbl)
+		card.add_child(tag_panel)
+
+		# 2. Subtag (Top-Right)
+		var subtag_lbl := Label.new()
+		subtag_lbl.text = data["subtag"]
+		subtag_lbl.position = Vector2(paper_size.x - pad_x - 120, 30)
+		subtag_lbl.size = Vector2(120, 30)
+		subtag_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		subtag_lbl.add_theme_font_size_override("font_size", 10)
+		subtag_lbl.add_theme_color_override("font_color", COL_MUTED)
+		card.add_child(subtag_lbl)
+
+		# 3. Quota Amount & Timer
+		var quota_lbl := Label.new()
+		quota_lbl.text = "%.0f KG" % data["quota_target"]
+		quota_lbl.position = Vector2(pad_x, 70)
+		quota_lbl.size = Vector2(160, 42)
+		quota_lbl.add_theme_font_size_override("font_size", 30)
+		quota_lbl.add_theme_color_override("font_color", COL_DARK_TEXT)
+		card.add_child(quota_lbl)
+
+		var timer_lbl := Label.new()
+		timer_lbl.text = "⏱ 02:30"
+		timer_lbl.position = Vector2(paper_size.x - pad_x - 90, 78)
+		timer_lbl.size = Vector2(90, 24)
+		timer_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		timer_lbl.add_theme_font_size_override("font_size", 12)
+		timer_lbl.add_theme_color_override("font_color", COL_DARK_TEXT)
+		card.add_child(timer_lbl)
+
+		# Divider Line
+		var div := ColorRect.new()
+		div.position = Vector2(pad_x, 120)
+		div.size = Vector2(eff_w, 1.5)
+		div.color = Color(0.78, 0.74, 0.68, 0.8)
+		card.add_child(div)
+
+		# 4. Mission Icon & Info
+		var mission_box := HBoxContainer.new()
+		mission_box.position = Vector2(pad_x, 134)
+		mission_box.size = Vector2(eff_w, 48)
+		mission_box.add_theme_constant_override("separation", 10)
+		card.add_child(mission_box)
+
+		var icon_tr := UIAssets.create_texture_rect(data["icon"])
+		icon_tr.custom_minimum_size = Vector2(40, 40)
+		icon_tr.size = Vector2(40, 40)
+		mission_box.add_child(icon_tr)
+
+		var m_vbox := VBoxContainer.new()
+		m_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var m_title := Label.new()
+		m_title.text = data["title"]
+		m_title.add_theme_font_size_override("font_size", 13)
+		m_title.add_theme_color_override("font_color", COL_DARK_TEXT)
+		m_vbox.add_child(m_title)
+
+		var m_desc := Label.new()
+		m_desc.text = data["desc"]
+		m_desc.add_theme_font_size_override("font_size", 10)
+		m_desc.add_theme_color_override("font_color", COL_MUTED)
+		m_vbox.add_child(m_desc)
+		mission_box.add_child(m_vbox)
+
+		# 5. Condition / Hazard Box
+		var cond_y: float = 196.0
+		if data.has("condition_warning"):
+			var warn_box := PanelContainer.new()
+			warn_box.position = Vector2(pad_x, cond_y)
+			warn_box.custom_minimum_size = Vector2(eff_w, 46)
+			var sb_w := StyleBoxFlat.new()
+			sb_w.bg_color = Color(0.98, 0.92, 0.90, 0.5)
+			sb_w.border_color = Color(0.85, 0.35, 0.30, 0.8)
+			sb_w.set_border_width_all(1)
+			sb_w.set_corner_radius_all(3)
+			sb_w.content_margin_left = 8
+			sb_w.content_margin_right = 8
+			sb_w.content_margin_top = 4
+			sb_w.content_margin_bottom = 4
+			warn_box.add_theme_stylebox_override("panel", sb_w)
+
+			var w_lbl := Label.new()
+			w_lbl.text = data["condition_warning"]
+			w_lbl.add_theme_font_size_override("font_size", 10)
+			w_lbl.add_theme_color_override("font_color", Color(0.80, 0.22, 0.18))
+			warn_box.add_child(w_lbl)
+			card.add_child(warn_box)
+			cond_y += 54
+		else:
+			var cond_row := HBoxContainer.new()
+			cond_row.position = Vector2(pad_x, cond_y)
+			cond_row.size = Vector2(eff_w, 24)
+			var c_t := Label.new()
+			c_t.text = data.get("condition_title", "MEDAN")
+			c_t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			c_t.add_theme_font_size_override("font_size", 11)
+			c_t.add_theme_color_override("font_color", COL_MUTED)
+			cond_row.add_child(c_t)
+
+			var c_d := Label.new()
+			c_d.text = data.get("condition_desc", "Normal")
+			c_d.add_theme_font_size_override("font_size", 11)
+			c_d.add_theme_color_override("font_color", COL_DARK_TEXT)
+			cond_row.add_child(c_d)
+			card.add_child(cond_row)
+			cond_y += 32
+
+		# Divider 2
+		var div2 := ColorRect.new()
+		div2.position = Vector2(pad_x, cond_y + 10)
+		div2.size = Vector2(eff_w, 1.0)
+		div2.color = Color(0.82, 0.78, 0.72, 0.7)
+		card.add_child(div2)
+
+		# 6. Payout & Stamp Rewards
+		var pay_row := HBoxContainer.new()
+		pay_row.position = Vector2(pad_x, cond_y + 20)
+		pay_row.size = Vector2(eff_w, 24)
+		var p_t := Label.new()
+		p_t.text = "BAYARAN"
+		p_t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		p_t.add_theme_font_size_override("font_size", 11)
+		p_t.add_theme_color_override("font_color", COL_MUTED)
+		pay_row.add_child(p_t)
+
+		var p_v := Label.new()
+		p_v.text = "+$%d" % data["payout"]
+		p_v.add_theme_font_size_override("font_size", 13)
+		p_v.add_theme_color_override("font_color", Color(0.18, 0.58, 0.22))
+		pay_row.add_child(p_v)
+		card.add_child(pay_row)
+
+		var stamp_row := HBoxContainer.new()
+		stamp_row.position = Vector2(pad_x, cond_y + 50)
+		stamp_row.size = Vector2(eff_w, 24)
+		var s_t := Label.new()
+		s_t.text = "STEMPEL"
+		s_t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		s_t.add_theme_font_size_override("font_size", 11)
+		s_t.add_theme_color_override("font_color", COL_MUTED)
+		stamp_row.add_child(s_t)
+
+		var s_v := Label.new()
+		s_v.text = data["stamp_reward"]
+		s_v.add_theme_font_size_override("font_size", 11)
+		s_v.add_theme_color_override("font_color", COL_BLUE if i == 1 else COL_DARK_TEXT)
+		stamp_row.add_child(s_v)
+		card.add_child(stamp_row)
+
+		# 7. Action Button on Paper (PILIH KONTRAK / ✓ KONTRAK DIPILIH)
+		var is_selected := (i == _selected_index)
+		var btn_path := "res://UI/02_shop/btn_contract_blue_wood.png" if is_selected else "res://UI/02_shop/btn_contract_brown_wood.png"
+		var btn_txt := "✓ KONTRAK DIPILIH" if is_selected else "PILIH KONTRAK"
+		var pilih_btn := UIAssets.create_textured_button(
+			btn_path,
+			btn_txt,
+			13,
+			COL_WHITE,
+			"",
+			Vector2(eff_w, 48)
 		)
-		_boss_btn.position = Vector2(-4.5, 388)
-		_boss_btn.custom_minimum_size = Vector2(246, 58)
-		_boss_btn.size = Vector2(246, 58)
-		var can_afford: bool = _player != null and _player.slop_credit >= REROLL_COST
-		_boss_btn.disabled = not can_afford
-		_boss_btn.pressed.connect(_on_boss_reroll_pressed)
-		card_column.add_child(_boss_btn)
-
-	return card_column
+		pilih_btn.position = Vector2(pad_x, paper_size.y - 70)
+		pilih_btn.pressed.connect(_on_contract_selected.bind(i))
+		card.add_child(pilih_btn)
+		_pilih_buttons.append(pilih_btn)
 
 
-# ---------------------------------------------------------------------------
-# Visual Selection State
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# Inspection Day Boss Event Paper (Mockup 2)
+# ===========================================================================
+func _build_boss_paper() -> void:
+	_contract_nodes.clear()
+	_selection_glows.clear()
+	_pilih_buttons.clear()
 
-func _update_card_selection_visuals() -> void:
-	for i in range(_card_selection_glows.size()):
-		var glow: ReferenceRect = _card_selection_glows[i]
-		if not is_instance_valid(glow):
-			continue
-		var is_sel: bool = (i == _selected_index)
-		glow.visible = is_sel
+	var data: Dictionary = _contracts_data[0]
+	var paper_size := Vector2(483, 510)
+	var paper_pos := Vector2(358, 16)
+
+	var card := Control.new()
+	card.position = paper_pos
+	card.custom_minimum_size = paper_size
+	card.size = paper_size
+	_papers_container.add_child(card)
+	_contract_nodes.append(card)
+
+	# Red-pinned Boss Contract Paper
+	var bg_tex := UIAssets.create_texture_rect(data["bg_tex"])
+	bg_tex.position = Vector2.ZERO
+	bg_tex.size = paper_size
+	card.add_child(bg_tex)
+
+	var pad_x: float = 40.0
+	var eff_w: float = paper_size.x - (pad_x * 2.0)
+
+	# 1. Inspection Day Tag (Top-Left)
+	var tag_panel := PanelContainer.new()
+	tag_panel.position = Vector2(pad_x, 34)
+	tag_panel.custom_minimum_size = Vector2(130, 28)
+	var sb_tag := StyleBoxFlat.new()
+	sb_tag.bg_color = Color(0, 0, 0, 0)
+	sb_tag.border_color = COL_RED
+	sb_tag.set_border_width_all(2)
+	sb_tag.set_corner_radius_all(4)
+	sb_tag.content_margin_left = 8
+	sb_tag.content_margin_right = 8
+	tag_panel.add_theme_stylebox_override("panel", sb_tag)
+
+	var tag_lbl := Label.new()
+	tag_lbl.text = data["tag"]
+	tag_lbl.add_theme_font_size_override("font_size", 12)
+	tag_lbl.add_theme_color_override("font_color", COL_RED)
+	tag_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tag_panel.add_child(tag_lbl)
+	card.add_child(tag_panel)
+
+	# 2. Subtag (Top-Right)
+	var subtag_lbl := Label.new()
+	subtag_lbl.text = data["subtag"]
+	subtag_lbl.position = Vector2(paper_size.x - pad_x - 180, 26)
+	subtag_lbl.size = Vector2(180, 40)
+	subtag_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	subtag_lbl.add_theme_font_size_override("font_size", 10)
+	subtag_lbl.add_theme_color_override("font_color", COL_RED)
+	card.add_child(subtag_lbl)
+
+	# 3. Quota Amount & Timer
+	var quota_lbl := Label.new()
+	var unit: String = data.get("target_unit", "KG")
+	if unit == "SC":
+		quota_lbl.text = "$%.0f SC" % data["quota_target"]
+	elif unit == "FLAG":
+		quota_lbl.text = "1× FLAG"
+	elif unit == "HEARTS":
+		quota_lbl.text = "3× HEARTS"
+	elif unit == "HP":
+		quota_lbl.text = "%.0f HP" % data["quota_target"]
+	else:
+		quota_lbl.text = "%.0f KG" % data["quota_target"]
+	quota_lbl.position = Vector2(pad_x, 78)
+	quota_lbl.size = Vector2(200, 46)
+	quota_lbl.add_theme_font_size_override("font_size", 34)
+	quota_lbl.add_theme_color_override("font_color", COL_RED)
+	card.add_child(quota_lbl)
+
+	var timer_lbl := Label.new()
+	timer_lbl.text = "⏱ 02:30"
+	timer_lbl.position = Vector2(paper_size.x - pad_x - 100, 88)
+	timer_lbl.size = Vector2(100, 26)
+	timer_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	timer_lbl.add_theme_font_size_override("font_size", 13)
+	timer_lbl.add_theme_color_override("font_color", COL_DARK_TEXT)
+	card.add_child(timer_lbl)
+
+	# Divider 1
+	var div := ColorRect.new()
+	div.position = Vector2(pad_x, 134)
+	div.size = Vector2(eff_w, 1.5)
+	div.color = Color(0.85, 0.70, 0.68, 0.8)
+	card.add_child(div)
+
+	# 4. Mission Icon & Info
+	var mission_box := HBoxContainer.new()
+	mission_box.position = Vector2(pad_x, 146)
+	mission_box.size = Vector2(eff_w, 48)
+	mission_box.add_theme_constant_override("separation", 12)
+	card.add_child(mission_box)
+
+	var icon_tr := UIAssets.create_texture_rect(data["icon"])
+	icon_tr.custom_minimum_size = Vector2(40, 40)
+	icon_tr.size = Vector2(40, 40)
+	mission_box.add_child(icon_tr)
+
+	var m_vbox := VBoxContainer.new()
+	m_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	var m_title := Label.new()
+	m_title.text = data["title"]
+	m_title.add_theme_font_size_override("font_size", 13)
+	m_title.add_theme_color_override("font_color", COL_DARK_TEXT)
+	m_vbox.add_child(m_title)
+
+	var m_desc := Label.new()
+	m_desc.text = data["desc"]
+	m_desc.add_theme_font_size_override("font_size", 10)
+	m_desc.add_theme_color_override("font_color", COL_MUTED)
+	m_vbox.add_child(m_desc)
+	mission_box.add_child(m_vbox)
+
+	# 5. Red Boss Warning Box
+	var warn_box := PanelContainer.new()
+	warn_box.position = Vector2(pad_x, 212)
+	warn_box.custom_minimum_size = Vector2(eff_w, 56)
+	var sb_w := StyleBoxFlat.new()
+	sb_w.bg_color = Color(0.98, 0.90, 0.88, 0.6)
+	sb_w.border_color = COL_RED
+	sb_w.set_border_width_all(1)
+	sb_w.set_corner_radius_all(4)
+	sb_w.content_margin_left = 10
+	sb_w.content_margin_right = 10
+	sb_w.content_margin_top = 6
+	sb_w.content_margin_bottom = 6
+	warn_box.add_theme_stylebox_override("panel", sb_w)
+
+	var w_lbl := Label.new()
+	w_lbl.text = data["rule_warning"]
+	w_lbl.add_theme_font_size_override("font_size", 10)
+	w_lbl.add_theme_color_override("font_color", COL_RED)
+	warn_box.add_child(w_lbl)
+	card.add_child(warn_box)
+
+	# Divider 2
+	var div2 := ColorRect.new()
+	div2.position = Vector2(pad_x, 280)
+	div2.size = Vector2(eff_w, 1.0)
+	div2.color = Color(0.85, 0.70, 0.68, 0.7)
+	card.add_child(div2)
+
+	# 6. Payout & Boss Reward
+	var pay_row := HBoxContainer.new()
+	pay_row.position = Vector2(pad_x, 292)
+	pay_row.size = Vector2(eff_w, 24)
+	var p_t := Label.new()
+	p_t.text = "BAYARAN"
+	p_t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	p_t.add_theme_font_size_override("font_size", 11)
+	p_t.add_theme_color_override("font_color", COL_MUTED)
+	pay_row.add_child(p_t)
+
+	var p_v := Label.new()
+	p_v.text = "+$%d" % data["payout"]
+	p_v.add_theme_font_size_override("font_size", 14)
+	p_v.add_theme_color_override("font_color", Color(0.18, 0.58, 0.22))
+	pay_row.add_child(p_v)
+	card.add_child(pay_row)
+
+	var boss_r_row := HBoxContainer.new()
+	boss_r_row.position = Vector2(pad_x, 324)
+	boss_r_row.size = Vector2(eff_w, 24)
+	var b_t := Label.new()
+	b_t.text = "HADIAH BOSS"
+	b_t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b_t.add_theme_font_size_override("font_size", 11)
+	b_t.add_theme_color_override("font_color", COL_MUTED)
+	boss_r_row.add_child(b_t)
+
+	var b_v := Label.new()
+	b_v.text = data["boss_reward"]
+	b_v.add_theme_font_size_override("font_size", 12)
+	b_v.add_theme_color_override("font_color", Color(0.70, 0.22, 0.85))
+	boss_r_row.add_child(b_v)
+	card.add_child(boss_r_row)
+
+	# 7. Red Action Button on Paper (✓ KONTRAK AUDIT WAJIB)
+	var audit_contract_btn := UIAssets.create_textured_button(
+		data["btn_tex"],
+		data["btn_text"],
+		14,
+		COL_WHITE,
+		"",
+		Vector2(eff_w, 54)
+	)
+	audit_contract_btn.position = Vector2(pad_x, paper_size.y - 78)
+	card.add_child(audit_contract_btn)
 
 
-func _refresh_header() -> void:
-	if _sc_label and _player:
-		_sc_label.text = "$%.0f" % _player.slop_credit
-	elif _sc_label:
-		_sc_label.text = "$0"
+# ===========================================================================
+# Bottom Bar (Dialogue + Start Shift Action Button)
+# ===========================================================================
+func _build_bottom_bar() -> void:
+	# 1. Dialogue Line on Left
+	var dlg_box := HBoxContainer.new()
+	dlg_box.position = Vector2(50, 660)
+	dlg_box.size = Vector2(880, 42)
+	dlg_box.add_theme_constant_override("separation", 10)
+	_content.add_child(dlg_box)
 
-	var cur_d: int = 1
-	if _dnc:
-		cur_d = _dnc.current_day
-	if _day_label:
-		_day_label.text = "DAY %d / %d" % [cur_d, MAX_DAYS]
+	var avatar := Label.new()
+	avatar.text = "📋" if is_boss_day else "🤠"
+	avatar.add_theme_font_size_override("font_size", 18)
+	dlg_box.add_child(avatar)
 
-	if _boss_btn:
-		var can_reroll: bool = _player != null and _player.slop_credit >= REROLL_COST
-		_boss_btn.disabled = not can_reroll
-		_boss_btn.modulate = Color.WHITE if can_reroll else Color(0.5, 0.5, 0.5, 0.75)
+	_dialogue_label = Label.new()
+	if is_boss_day:
+		var dlg_default: String = "The Inspector: \"Hari ini event wajib! Penuhi kuota audit atau Taman Nasional resmi ditutup!\""
+		_dialogue_label.text = active_event_data.get("dialogue", dlg_default)
+	else:
+		_dialogue_label.text = "Chief Ranger: \"Pilih 1 kertas kontrak di papan, lalu mulai shift!\""
+	_dialogue_label.add_theme_font_size_override("font_size", 13)
+	_dialogue_label.add_theme_color_override("font_color", Color(0.96, 0.40, 0.35) if is_boss_day else Color(0.95, 0.82, 0.40))
+	_dialogue_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	dlg_box.add_child(_dialogue_label)
 
-
-# ---------------------------------------------------------------------------
-# Interactions & Callbacks
-# ---------------------------------------------------------------------------
-
-func _on_card_clicked(idx: int) -> void:
-	if idx < 0 or idx >= _cards_data.size():
-		return
-	if bool(_cards_data[idx].get("is_skipped", false)):
-		return
-
-	_selected_index = idx
-	_update_card_selection_visuals()
-	contract_selected.emit(_cards_data[idx])
-
-
-func _on_skip_pressed(idx: int) -> void:
-	if idx < 0 or idx >= _cards_data.size():
-		return
-	var data: Dictionary = _cards_data[idx]
-	if bool(data.get("is_skipped", false)):
-		return
-
-	var reward: float = float(data.get("skip_reward", 15.0))
-	if _player != null:
-		_player.slop_credit += reward
-		if _player.has_signal("slop_credit_changed"):
-			_player.slop_credit_changed.emit(_player.slop_credit, reward)
-		if _player.has_method("_show_feedback"):
-			_player._show_feedback("💰 +%.0f SC (Quota Skipped!)" % reward)
-
-	data["is_skipped"] = true
-	_cards_data[idx] = data
-
-	_refresh_header()
-	_render_cards()
-	_update_card_selection_visuals()
+	# 2. Start Shift / Mulai Audit Button on Right
+	var btn_tex := "res://UI/02_shop/btn_audit_red_wood.png" if is_boss_day else "res://UI/02_shop/btn_start_blue_wood.png"
+	var tag_title: String = active_event_data.get("tag", "AUDIT")
+	var btn_title := ("MULAI %s  →" % tag_title) if is_boss_day else "MULAI SHIFT  →"
+	_start_shift_btn = UIAssets.create_textured_button(
+		btn_tex,
+		btn_title,
+		15,
+		COL_WHITE,
+		"",
+		Vector2(260, 56)
+	)
+	_start_shift_btn.position = Vector2(965, 648)
+	_start_shift_btn.pressed.connect(_on_start_shift_confirmed)
+	_content.add_child(_start_shift_btn)
 
 
-func _on_boss_reroll_pressed() -> void:
-	if _player == null:
-		return
-	if _player.slop_credit < REROLL_COST:
-		return
-
-	_player.slop_credit -= REROLL_COST
-	if _player.has_signal("slop_credit_changed"):
-		_player.slop_credit_changed.emit(_player.slop_credit, -float(REROLL_COST))
-
-	var cur_idx: int = int(_cards_data[2].get("boss_idx", 0))
-	var next_idx: int = (cur_idx + 1) % BOSS_MODIFIERS.size()
-	var b_data: Dictionary = BOSS_MODIFIERS[next_idx]
-
-	var base_q: float = 15.0
-	if _dnc:
-		base_q = _dnc.get_current_quota()
-
-	_cards_data[2]["title"] = b_data["title"]
-	_cards_data[2]["upper_text"] = b_data["desc"]
-	_cards_data[2]["serial"] = b_data["serial"]
-	_cards_data[2]["quota_target"] = base_q * float(b_data["quota_mult"])
-	_cards_data[2]["lower_text"] = "Target Kuota: %.0f KG" % (base_q * float(b_data["quota_mult"]))
-	_cards_data[2]["icon"] = b_data["icon"]
-	_cards_data[2]["boss_idx"] = next_idx
-
-	_refresh_header()
-	_render_cards()
-	_update_card_selection_visuals()
-
-
-func _on_shop_pressed() -> void:
-	if _player and _player.has_method("toggle_buy_menu"):
-		_player.toggle_buy_menu()
-		queue_free()
-
-
-func _on_mach_pressed() -> void:
-	if _player and _player.has_method("toggle_machine_menu"):
-		_player.toggle_machine_menu()
-		queue_free()
-
-
-func _on_start_day_pressed() -> void:
-	var chosen: Dictionary = _cards_data[_selected_index]
-	var is_skip: bool = bool(chosen.get("is_skipped", false))
-
+# ===========================================================================
+# Updates & Selection Handling
+# ===========================================================================
+func _refresh_top_bar() -> void:
+	var cur_day := 1
+	var is_challenge := false
 	if _dnc != null:
-		if is_skip:
-			_dnc.custom_day_quota = 0.0
+		cur_day = _dnc.current_day
+		if "event_system" in _dnc and _dnc.event_system and "current_game_mode" in _dnc.event_system:
+			is_challenge = (_dnc.event_system.current_game_mode == 1)
+	if is_instance_valid(_day_label):
+		_day_label.text = ("🔥 DAY %02d / %02d" if is_challenge else "DAY %02d / %02d") % [cur_day, MAX_DAYS]
+
+	var funds: int = 14
+	if _player != null and "slop_credit" in _player:
+		funds = int(_player.slop_credit)
+	if is_instance_valid(_funds_label):
+		_funds_label.text = "$%d" % funds
+
+	if is_challenge and is_instance_valid(_boss_tag_label):
+		_boss_tag_label.text = "🔥 CHALLENGE"
+		_boss_tag_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.30))
+
+
+func _on_contract_selected(idx: int) -> void:
+	if idx < 0 or idx >= _contracts_data.size():
+		return
+	_selected_index = idx
+	_update_contract_selection_visuals()
+	emit_signal("contract_selected", _contracts_data[_selected_index])
+	if NetworkManager.is_multiplayer_active():
+		NetworkManager.submit_quota_vote(_selected_index)
+
+
+func _update_contract_selection_visuals() -> void:
+	if is_boss_day:
+		return
+
+	for i in range(_selection_glows.size()):
+		var glow: ReferenceRect = _selection_glows[i]
+		if is_instance_valid(glow):
+			glow.visible = (i == _selected_index)
+
+	for i in range(_pilih_buttons.size()):
+		var btn: Button = _pilih_buttons[i]
+		if is_instance_valid(btn):
+			var is_sel := (i == _selected_index)
+			btn.text = "✓ KONTRAK DIPILIH" if is_sel else "PILIH KONTRAK"
+			var tex_p := "res://UI/02_shop/btn_contract_blue_wood.png" if is_sel else "res://UI/02_shop/btn_contract_brown_wood.png"
+			var tex := UIAssets.get_tex(tex_p)
+			if tex:
+				var sb := StyleBoxTexture.new()
+				sb.texture = tex
+				btn.add_theme_stylebox_override("normal", sb)
+
+
+func _on_start_shift_confirmed() -> void:
+	if NetworkManager.is_multiplayer_active():
+		if NetworkManager.is_host():
+			NetworkManager.resolve_and_start_quota_vote()
 		else:
-			_dnc.custom_day_quota = float(chosen.get("quota_target", 15.0))
+			NetworkManager.lock_quota_vote(_selected_index)
+			if is_instance_valid(_start_shift_btn):
+				_start_shift_btn.disabled = true
+				_start_shift_btn.text = "LOCKED ✓ (Waiting...)"
+		return
+	_finalize_shift_start()
 
-		if "is_waiting_for_day_start" in _dnc:
-			_dnc.is_waiting_for_day_start = false
 
-	var hud = get_tree().get_first_node_in_group("game_hud")
-	if hud and hud.has_method("update_quota"):
-		var target: float = 0.0 if is_skip else float(chosen.get("quota_target", 15.0))
-		hud.update_quota(0.0, target, "KG")
+func _on_coop_vote_finalized(winning_idx: int) -> void:
+	if _contracts_data.size() > 0:
+		_selected_index = clampi(winning_idx, 0, _contracts_data.size() - 1)
+	_finalize_shift_start()
 
-	if _player and _player.has_method("_show_feedback"):
-		if is_skip:
-			_player._show_feedback("☀️ Day Started! Quota was skipped.")
-		else:
-			_player._show_feedback("📋 Contract: %s (Target: %.0f KG)" % [chosen.get("title", "Quota"), chosen.get("quota_target", 15.0)])
 
-	day_started.emit(chosen)
-	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-	queue_free()
+func _refresh_vote_ui() -> void:
+	if not NetworkManager.is_multiplayer_active() or is_boss_day:
+		return
+
+	var counts: Dictionary = {}
+	for pid in NetworkManager.quota_votes.keys():
+		var idx: int = NetworkManager.quota_votes[pid]
+		counts[idx] = counts.get(idx, 0) + 1
+
+	for i in range(_pilih_buttons.size()):
+		var btn: Button = _pilih_buttons[i]
+		if is_instance_valid(btn):
+			var c: int = counts.get(i, 0)
+			var is_sel := (i == _selected_index)
+			var prefix := "✓ YOUR VOTE" if is_sel else "VOTE"
+			btn.text = "%s (%d)" % [prefix, c]
+
+	var total_peers := 1 + NetworkManager.spawned_players.size()
+	var locked_count := NetworkManager.quota_locked.size()
+	if is_instance_valid(_dialogue_label):
+		_dialogue_label.text = "🗳️ Co-op Quota Vote (%d/%d locked in) — Ties go to the Host!" % [locked_count, total_peers]
+	if is_instance_valid(_start_shift_btn) and not _start_shift_btn.disabled:
+		_start_shift_btn.text = "RESOLVE VOTE & START" if NetworkManager.is_host() else "LOCK IN VOTE"
+
+
+func _finalize_shift_start() -> void:
+	var chosen_contract: Dictionary = _contracts_data[_selected_index]
+
+	# Apply custom quota target and modifiers to DayNightCycle
+	if _dnc != null:
+		_dnc.custom_day_quota = float(chosen_contract.get("quota_target", 15.0))
+		_dnc.is_waiting_for_day_start = false
+
+	# Apply boss penalties / contract modifiers to Player if applicable
+	if _player != null and chosen_contract.get("is_boss", false):
+		if "is_boss_day" in _player:
+			_player.is_boss_day = true
+
+	emit_signal("day_started", chosen_contract)
+
+	var tw := create_tween()
+	tw.tween_property(_root, "modulate:a", 0.0, 0.25)
+	tw.tween_callback(func():
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+		queue_free()
+	)

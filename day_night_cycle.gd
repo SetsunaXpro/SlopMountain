@@ -94,13 +94,31 @@ var _fade_tween: Tween = null
 var is_waiting_for_day_start: bool = false
 var custom_day_quota: float = -1.0
 var quota_menu: CanvasLayer = null
+var event_system: Node = null
+var game_mode: int = 0 # 0 = Standard, 1 = Challenge
+var _net_time_sync_accum: float = 0.0
+
+
+func set_game_mode(mode: int) -> void:
+	game_mode = mode
+	if event_system and event_system.has_method("set_game_mode"):
+		event_system.set_game_mode(mode)
 
 
 func _ready() -> void:
 	add_to_group("day_night_cycle")
+	var es_script = preload("res://event_system.gd")
+	event_system = es_script.new()
+	event_system.dnc = self
+	add_child(event_system)
 	call_deferred("_setup_lighting_references")
 	_setup_ui()
-	emit_signal("day_started", current_day)
+	var title = get_tree().get_first_node_in_group("title_screen")
+	if title and is_instance_valid(title) and title.is_inside_tree() and title.visible:
+		is_waiting_for_day_start = true
+		_apply_lighting(0.0)
+	else:
+		emit_signal("day_started", current_day)
 	print("DayNightCycle: Initialized. Day duration: %.1f seconds (~%.1f mins). Day 1 Quota: %.1f" % [day_duration_seconds, day_duration_seconds / 60.0, get_current_quota()])
 
 
@@ -169,16 +187,33 @@ func get_daily_progress_amount() -> float:
 
 
 func _process(delta: float) -> void:
-	# Only pause time if the quota selection menu is actively open and visible
+	# Only pause time if a menu (TitleScreen or QuotaMenu) is actively open and visible
 	if is_waiting_for_day_start:
+		var has_menu := false
 		if is_instance_valid(quota_menu) and quota_menu.is_inside_tree() and quota_menu.visible:
+			has_menu = true
+		var title = get_tree().get_first_node_in_group("title_screen")
+		if title and is_instance_valid(title) and title.is_inside_tree() and title.visible:
+			has_menu = true
+
+		if has_menu:
 			_apply_lighting(0.0)
 			return
 		else:
 			is_waiting_for_day_start = false
 
 	if not is_night:
-		day_elapsed_seconds += delta * debug_time_scale
+		if NetworkManager.is_host():
+			day_elapsed_seconds += delta * debug_time_scale
+			if NetworkManager.is_multiplayer_active():
+				_net_time_sync_accum += delta
+				if _net_time_sync_accum >= 0.5:
+					_net_time_sync_accum = 0.0
+					_rpc_sync_time.rpc(current_day, day_elapsed_seconds, is_night, is_waiting_for_day_start, custom_day_quota)
+		else:
+			# Clients smoothly advance locally between host sync snapshots
+			day_elapsed_seconds = minf(day_elapsed_seconds + delta * debug_time_scale, day_duration_seconds)
+
 		var progress: float = clampf(day_elapsed_seconds / day_duration_seconds, 0.0, 1.0)
 		_apply_lighting(progress)
 		_update_hud(progress)
@@ -194,7 +229,7 @@ func _process(delta: float) -> void:
 				if player and player.has_method("_show_feedback"):
 					player._show_feedback("🎉 Sunset Quota Met! (%.1f reached)" % collected)
 
-		if day_elapsed_seconds >= day_duration_seconds:
+		if NetworkManager.is_host() and day_elapsed_seconds >= day_duration_seconds:
 			trigger_night()
 	else:
 		_update_night_lighting()
@@ -206,6 +241,15 @@ func _process(delta: float) -> void:
 # ===========================================================================
 
 func _apply_lighting(progress: float) -> void:
+	# Check if Evernight boss event is active
+	if event_system and event_system.is_event_active and event_system.active_event_id == "evernight":
+		_apply_evernight_lighting()
+		var clock_hour_e: float = lerpf(sunrise_hour, sunset_hour, progress)
+		var h_int: int = int(clock_hour_e)
+		var m_int: int = int((clock_hour_e - h_int) * 60.0)
+		emit_signal("time_updated", progress, h_int, m_int)
+		return
+
 	# Calculate virtual clock hour
 	var clock_hour: float = lerpf(sunrise_hour, sunset_hour, progress)
 	var hour_int: int = int(clock_hour)
@@ -239,8 +283,13 @@ func _apply_lighting(progress: float) -> void:
 		_sun.light_color = sun_col
 		_sun.light_energy = sun_energy
 
-	# Procedural sky tint
+	# Procedural sky tint (restore normal sky when not in Evernight)
+	if _world_env and _world_env.environment:
+		_world_env.environment.fog_enabled = false
+		_world_env.environment.ambient_light_color = Color(1.0, 1.0, 1.0)
 	if _procedural_sky:
+		_procedural_sky.sky_top_color = _orig_sky_top
+		_procedural_sky.ground_horizon_color = _orig_ground_horizon
 		if progress < 0.2:
 			var t := progress / 0.2
 			_procedural_sky.sky_horizon_color = Color(0.9, 0.55, 0.4).lerp(_orig_sky_horizon, t)
@@ -252,6 +301,23 @@ func _apply_lighting(progress: float) -> void:
 		else:
 			_procedural_sky.sky_horizon_color = _orig_sky_horizon
 			_procedural_sky.sky_energy_multiplier = _orig_sky_energy
+
+
+func _apply_evernight_lighting() -> void:
+	if _sun:
+		_sun.rotation = Vector3(deg_to_rad(-25.0), deg_to_rad(45.0), 0.0)
+		_sun.light_color = Color(0.95, 0.12, 0.14) # Menacing crimson sun
+		_sun.light_energy = 0.55
+	if _procedural_sky:
+		_procedural_sky.sky_top_color = Color(0.18, 0.01, 0.03)
+		_procedural_sky.sky_horizon_color = Color(0.62, 0.06, 0.08)
+		_procedural_sky.ground_horizon_color = Color(0.45, 0.05, 0.07)
+		_procedural_sky.sky_energy_multiplier = 0.65
+	if _world_env and _world_env.environment:
+		_world_env.environment.ambient_light_color = Color(0.75, 0.12, 0.15)
+		_world_env.environment.fog_enabled = true
+		_world_env.environment.fog_light_color = Color(0.48, 0.05, 0.08)
+		_world_env.environment.fog_density = 0.012
 
 
 func _update_night_lighting() -> void:
@@ -281,6 +347,19 @@ func end_day_early() -> void:
 
 
 func trigger_night() -> void:
+	if is_night:
+		return
+	if NetworkManager.is_multiplayer_active() and NetworkManager.is_host():
+		_rpc_trigger_night.rpc()
+	_do_trigger_night()
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_trigger_night() -> void:
+	_do_trigger_night()
+
+
+func _do_trigger_night() -> void:
 	if is_night:
 		return
 	is_night = true
@@ -365,6 +444,17 @@ func trigger_night() -> void:
 
 
 func advance_to_next_day() -> void:
+	if NetworkManager.is_multiplayer_active() and NetworkManager.is_host():
+		_rpc_advance_to_next_day.rpc()
+	_do_advance_to_next_day()
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_advance_to_next_day() -> void:
+	_do_advance_to_next_day()
+
+
+func _do_advance_to_next_day() -> void:
 	if _fade_tween and _fade_tween.is_valid():
 		_fade_tween.kill()
 
@@ -379,6 +469,17 @@ func advance_to_next_day() -> void:
 
 
 func retry_current_day() -> void:
+	if NetworkManager.is_multiplayer_active() and NetworkManager.is_host():
+		_rpc_retry_current_day.rpc()
+	_do_retry_current_day()
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_retry_current_day() -> void:
+	_do_retry_current_day()
+
+
+func _do_retry_current_day() -> void:
 	if _fade_tween and _fade_tween.is_valid():
 		_fade_tween.kill()
 
@@ -412,6 +513,9 @@ func _on_fade_black_complete() -> void:
 	_quota_toast_triggered = false
 	custom_day_quota = -1.0
 
+	if event_system:
+		event_system.cleanup_event_entities()
+
 	# Reset player daily stats
 	var player := get_tree().get_first_node_in_group("player")
 	if player and player.has_method("on_new_day_started"):
@@ -429,6 +533,9 @@ func _on_fade_retry_complete() -> void:
 	day_elapsed_seconds = 0.0
 	is_night = false
 	_quota_toast_triggered = false
+
+	if event_system:
+		event_system.cleanup_event_entities()
 
 	# Reset player daily stats for retry
 	var player := get_tree().get_first_node_in_group("player")
@@ -463,6 +570,12 @@ func open_quota_selection() -> void:
 func _on_quota_selection_confirmed(contract_data: Dictionary) -> void:
 	is_waiting_for_day_start = false
 	quota_menu = null
+
+	if contract_data.get("is_boss", false) and event_system:
+		event_system.start_event(contract_data.get("id", ""))
+		if contract_data.get("id", "") == "evernight":
+			_apply_evernight_lighting()
+
 	emit_signal("day_started", current_day)
 
 
@@ -750,3 +863,12 @@ func _update_hud(progress: float) -> void:
 		_hud_time_label.text = "Nightfall"
 		_hud_remaining_label.text = "Waiting for Next Day"
 		_hud_day_progress.value = 1.0
+
+
+@rpc("authority", "call_remote", "unreliable_ordered")
+func _rpc_sync_time(p_day: int, p_elapsed: float, p_is_night: bool, p_waiting: bool, p_custom_quota: float) -> void:
+	current_day = p_day
+	day_elapsed_seconds = p_elapsed
+	is_night = p_is_night
+	is_waiting_for_day_start = p_waiting
+	custom_day_quota = p_custom_quota

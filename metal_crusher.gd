@@ -207,10 +207,19 @@ func _finish_processing() -> void:
 	for i in range(cubes_to_produce):
 		_spawn_compacted_cube(i)
 
+	if NetworkManager.is_multiplayer_active() and cubes_to_produce > 0:
+		_rpc_spawn_outputs.rpc(cubes_to_produce)
+
 	_is_processing = false
 	_process_timer = 0.0
 	processing_finished.emit(cubes_to_produce)
 	_notify_player("✅ Produced %d Compacted Metal Cube(s)!" % cubes_to_produce)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_spawn_outputs(count: int) -> void:
+	for i in range(count):
+		_spawn_compacted_cube(i)
 
 
 func _spawn_compacted_cube(index: int) -> void:

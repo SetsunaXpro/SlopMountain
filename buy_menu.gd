@@ -1,21 +1,19 @@
 # buy_menu.gd
-# Mossy's Junkyard Outpost — Mod Shop
-# Opens with B key (toggled by ProtoController) or between days.
-# Uses raw HD UI textures in res://UI/02_shop/ and res://UI/03_cards/
+# Mossy's Junkyard Outpost — Mod Shop Screen
+# Accurately reproduces Mockup 4 using raw HD UI textures in res://UI/02_shop/ and res://UI/03_cards/
 
-class_name BuyMenu extends CanvasLayer
+class_name BuyMenu
+extends CanvasLayer
 
-const UIAssets = preload("res://ui_assets.gd")
-
-# ---------------------------------------------------------------------------
-# Signals
-# ---------------------------------------------------------------------------
 signal day_started
 signal item_purchased(item_id: String)
 
-# ---------------------------------------------------------------------------
-# Perk pool definition
-# ---------------------------------------------------------------------------
+const UIAssets = preload("res://ui_assets.gd")
+
+const REROLL_COST: int = 2
+const MAX_DAYS: int = 8
+
+# Perk pool definition matching game balance and mockups
 const PERK_POOL: Array[Dictionary] = [
 	{
 		"id": "hivis_vest",
@@ -40,7 +38,7 @@ const PERK_POOL: Array[Dictionary] = [
 		"name": "PIGGY JAR",
 		"rarity": "UNCOMMON",
 		"cost": 6,
-		"serial": "SCRAP-ID // 03-PIGGY",
+		"serial": "SCRAP-ID // 08-PIGGY",
 		"desc": "Di akhir hari patroli, dapat bonus bunga +$1 per simpanan $5 uang.",
 		"icon": "piggy"
 	},
@@ -85,29 +83,29 @@ const MOSSY_LINES: Array[String] = [
 	"\"Hari terakhir! Pastikan kamu siap, bos!\"",
 ]
 
-const REROLL_COST: int = 2
-const MAX_DAYS: int = 8
-
-# ---------------------------------------------------------------------------
 # State
-# ---------------------------------------------------------------------------
 var _player = null
-var _dnc = null
+var _dnc: DayNightCycle = null
+
 var _current_offers: Array[Dictionary] = []
 var _buy_buttons: Array[Button] = []
+var _button_glows: Array[ReferenceRect] = []
 var _sc_label: Label = null
 var _day_label: Label = null
 var _dlg_label: Label = null
 var _reroll_btn: Button = null
 var _start_btn: Button = null
-var _cards_hbox: HBoxContainer = null
 
-# ---------------------------------------------------------------------------
-# Lifecycle
-# ---------------------------------------------------------------------------
+var _root: Control = null
+var _content: Control = null
+var _cards_container: Control = null
+
 
 func _ready() -> void:
 	layer = 20
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+
 	_resolve_references()
 	_build_ui()
 	_refresh_offers()
@@ -120,7 +118,6 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	# Restore GameHUD on close
 	var hud = get_tree().get_first_node_in_group("game_hud")
 	if hud:
 		hud.visible = true
@@ -133,201 +130,177 @@ func _resolve_references() -> void:
 		_dnc = get_tree().get_first_node_in_group("day_night_cycle")
 
 
-# ---------------------------------------------------------------------------
-# UI Construction
-# ---------------------------------------------------------------------------
-
 func _build_ui() -> void:
-	var root := Control.new()
-	root.name = "ShopRoot"
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(root)
+	_root = Control.new()
+	_root.name = "ShopRoot"
+	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(_root)
 
 	# 1280 x 720 centered canvas container
-	var content := Control.new()
-	content.name = "Content"
-	content.set_anchors_preset(Control.PRESET_CENTER)
-	content.offset_left = -640
-	content.offset_right = 640
-	content.offset_top = -360
-	content.offset_bottom = 360
-	content.custom_minimum_size = Vector2(1280, 720)
-	content.size = Vector2(1280, 720)
-	root.add_child(content)
+	_content = Control.new()
+	_content.name = "Content"
+	_content.set_anchors_preset(Control.PRESET_CENTER)
+	_content.offset_left = -640
+	_content.offset_right = 640
+	_content.offset_top = -360
+	_content.offset_bottom = 360
+	_content.custom_minimum_size = Vector2(1280, 720)
+	_content.size = Vector2(1280, 720)
+	_root.add_child(_content)
 
-	# Full-screen HD Backdrop & Workbench Background (1280 x 720)
-	var bg_tex := UIAssets.create_texture_rect("res://UI/02_shop/shop_bg_full.png")
+	# 1. Fullscreen Dawn Wall Background (1280 x 720)
+	var bg_tex := UIAssets.create_texture_rect("res://UI/02_shop/bg_dawn_wall.png")
 	bg_tex.position = Vector2.ZERO
 	bg_tex.size = Vector2(1280, 720)
-	content.add_child(bg_tex)
+	_content.add_child(bg_tex)
 
-	# --- TOP HEADER BAR ----------------------------------------------------
-	# 1. Funds Plate (Left: 186 x 52)
-	var funds_bg := UIAssets.create_texture_rect("res://UI/02_shop/shop_header_funds_bg.png")
-	funds_bg.position = Vector2(32, 12)
-	funds_bg.size = Vector2(186, 52)
-	content.add_child(funds_bg)
+	# 2. Ranger Corkboard in Center (1200 x 562)
+	var corkboard := UIAssets.create_texture_rect("res://UI/02_shop/ranger_corkboard.png")
+	corkboard.position = Vector2(40, 76)
+	corkboard.size = Vector2(1200, 562)
+	_content.add_child(corkboard)
 
-	_sc_label = Label.new()
-	_sc_label.text = "$0"
-	_sc_label.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_sc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_sc_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_sc_label.add_theme_color_override("font_color", Color(0.96, 0.85, 0.25))
-	_sc_label.add_theme_font_size_override("font_size", 18)
-	funds_bg.add_child(_sc_label)
+	# 3. Top Header Bar
+	_build_header_bar()
 
-	# 2. Outpost Title Plate (Center: 586 x 52)
-	var title_bg := UIAssets.create_texture_rect("res://UI/02_shop/shop_header_title_bg.png")
-	title_bg.position = Vector2(347, 12)
-	title_bg.size = Vector2(586, 52)
-	content.add_child(title_bg)
+	# 4. Mod Cards Container on Corkboard
+	_cards_container = Control.new()
+	_cards_container.position = Vector2(40, 76)
+	_cards_container.size = Vector2(1200, 562)
+	_content.add_child(_cards_container)
+
+	# 5. Bottom Controls (Reroll, Mossy Dialogue, Start Day)
+	_build_bottom_bar()
+
+
+# ===========================================================================
+# Header Bar (Day Plate, Shop Slab, Funds Plate)
+# ===========================================================================
+func _build_header_bar() -> void:
+	# 1. Day Plate (Left: 216 x 48)
+	var day_plate := UIAssets.create_texture_rect("res://UI/02_shop/plate_day_bg.png")
+	day_plate.position = Vector2(48, 16)
+	day_plate.size = Vector2(216, 48)
+	_content.add_child(day_plate)
+
+	_day_label = Label.new()
+	_day_label.text = "DAY 01 / 08"
+	_day_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_day_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_day_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_day_label.add_theme_color_override("font_color", Color(0.92, 0.94, 0.98))
+	_day_label.add_theme_font_size_override("font_size", 16)
+	day_plate.add_child(_day_label)
+
+	# 2. Center Slab: MOSSY'S JUNKYARD OUTPOST (540 x 58)
+	var title_slab := UIAssets.create_texture_rect("res://UI/02_shop/header_slab_shop_bg.png")
+	title_slab.position = Vector2(370, 14)
+	title_slab.size = Vector2(540, 58)
+	_content.add_child(title_slab)
 
 	var title_lbl := Label.new()
 	title_lbl.text = "MOSSY'S JUNKYARD OUTPOST"
 	title_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	title_lbl.add_theme_color_override("font_color", Color(0.95, 0.92, 0.88))
-	title_lbl.add_theme_font_size_override("font_size", 20)
-	title_bg.add_child(title_lbl)
+	title_lbl.add_theme_color_override("font_color", Color(0.20, 0.16, 0.12))
+	title_lbl.add_theme_font_size_override("font_size", 18)
+	title_slab.add_child(title_lbl)
 
-	# 3. Day Plate (Right: 186 x 52)
-	var day_bg := UIAssets.create_texture_rect("res://UI/02_shop/shop_header_day_bg.png")
-	day_bg.position = Vector2(1062, 12)
-	day_bg.size = Vector2(186, 52)
-	content.add_child(day_bg)
+	# 3. Funds Plate (Right: 180 x 48)
+	var funds_plate := UIAssets.create_texture_rect("res://UI/02_shop/plate_funds_bg.png")
+	funds_plate.position = Vector2(1052, 16)
+	funds_plate.size = Vector2(180, 48)
+	_content.add_child(funds_plate)
 
-	_day_label = Label.new()
-	_day_label.text = "DAY 1 / 8"
-	_day_label.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_day_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_day_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_day_label.add_theme_color_override("font_color", Color(0.88, 0.90, 0.94))
-	_day_label.add_theme_font_size_override("font_size", 16)
-	day_bg.add_child(_day_label)
-
-	# --- DIALOGUE STRIP (886 x 48) -----------------------------------------
-	var dlg_bg := UIAssets.create_texture_rect("res://UI/02_shop/shop_dialogue_bg.png")
-	dlg_bg.position = Vector2(197, 72)
-	dlg_bg.size = Vector2(886, 48)
-	content.add_child(dlg_bg)
-
-	_dlg_label = Label.new()
-	_dlg_label.text = "🐸 Mossy: \"Pilih satu mod sebelum senja tiba, Ranger!\""
-	_dlg_label.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_dlg_label.offset_left = 20
-	_dlg_label.offset_right = -20
-	_dlg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	_dlg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_dlg_label.add_theme_color_override("font_color", Color(0.86, 0.84, 0.78))
-	_dlg_label.add_theme_font_size_override("font_size", 15)
-	dlg_bg.add_child(_dlg_label)
-
-	# --- CARDS CONTAINER (OVER THE WORKBENCH) ------------------------------
-	_cards_hbox = HBoxContainer.new()
-	_cards_hbox.name = "CardsHBox"
-	_cards_hbox.position = Vector2(252, 134)
-	_cards_hbox.custom_minimum_size = Vector2(775, 480)
-	_cards_hbox.size = Vector2(775, 480)
-	_cards_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
-	_cards_hbox.add_theme_constant_override("separation", 32)
-	content.add_child(_cards_hbox)
-
-	# --- BOTTOM BUTTONS ----------------------------------------------------
-	# REROLL Button (246 x 58)
-	_reroll_btn = UIAssets.create_textured_button(
-		"res://UI/02_shop/btn_reroll_bg.png",
-		"🎲  REROLL ($%d)" % REROLL_COST,
-		16,
-		Color.WHITE
-	)
-	_reroll_btn.position = Vector2(32, 646)
-	_reroll_btn.custom_minimum_size = Vector2(246, 58)
-	_reroll_btn.size = Vector2(246, 58)
-	_reroll_btn.pressed.connect(_on_reroll_pressed)
-	content.add_child(_reroll_btn)
-
-	# MACHINES Button (246 x 58)
-	var mach_btn := UIAssets.create_textured_button(
-		"res://UI/02_shop/btn_reroll_bg.png",
-		"⚙️  MACHINES [M]",
-		16,
-		Color.WHITE
-	)
-	mach_btn.position = Vector2(298, 646)
-	mach_btn.custom_minimum_size = Vector2(246, 58)
-	mach_btn.size = Vector2(246, 58)
-	mach_btn.pressed.connect(_on_machine_shop_pressed)
-	content.add_child(mach_btn)
-
-	# START DAY Button (246 x 58)
-	_start_btn = UIAssets.create_textured_button(
-		"res://UI/02_shop/btn_start_day_bg.png",
-		"START DAY →",
-		17,
-		Color.WHITE
-	)
-	_start_btn.position = Vector2(1002, 646)
-	_start_btn.custom_minimum_size = Vector2(246, 58)
-	_start_btn.size = Vector2(246, 58)
-	_start_btn.pressed.connect(_on_start_day_pressed)
-	content.add_child(_start_btn)
+	_sc_label = Label.new()
+	_sc_label.text = "$14"
+	_sc_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_sc_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_sc_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_sc_label.add_theme_color_override("font_color", Color(0.98, 0.88, 0.25))
+	_sc_label.add_theme_font_size_override("font_size", 18)
+	funds_plate.add_child(_sc_label)
 
 
-# ---------------------------------------------------------------------------
-# Card Building
-# ---------------------------------------------------------------------------
-
+# ===========================================================================
+# Mod Cards Construction
+# ===========================================================================
 func _rebuild_cards() -> void:
-	if not is_instance_valid(_cards_hbox):
+	if not is_instance_valid(_cards_container):
 		return
-	for c in _cards_hbox.get_children():
-		c.queue_free()
+	for child in _cards_container.get_children():
+		child.queue_free()
 	_buy_buttons.clear()
+	_button_glows.clear()
 
-	for perk in _current_offers:
-		var card := _build_card(perk)
-		_cards_hbox.add_child(card)
+	var card_x_offsets := [190.0, 520.0, 850.0]
+
+	for i in range(_current_offers.size()):
+		var perk: Dictionary = _current_offers[i]
+		var card_x: float = card_x_offsets[i] if i < card_x_offsets.size() else 190.0 + (i * 330.0)
+		_build_single_card(i, perk, card_x)
 
 
-func _build_card(perk: Dictionary) -> Control:
-	var card_node := Control.new()
-	card_node.custom_minimum_size = Vector2(237, 382)
-	card_node.size = Vector2(237, 382)
-	card_node.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	card_node.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+func _build_single_card(index: int, perk: Dictionary, pos_x: float) -> void:
+	var card_w := 230.0
+	var card_h := 380.0
 
-	# 1. Base HD Card Texture (237 x 382)
+	var card_base := Control.new()
+	card_base.position = Vector2(pos_x, 40.0)
+	card_base.custom_minimum_size = Vector2(card_w, card_h)
+	card_base.size = Vector2(card_w, card_h)
+	_cards_container.add_child(card_base)
+
+	# 1. Base Card Texture (230 x 380)
 	var card_bg := UIAssets.create_texture_rect("res://UI/03_cards/card_mod_base_empty.png")
 	card_bg.position = Vector2.ZERO
-	card_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card_node.add_child(card_bg)
+	card_bg.size = Vector2(card_w, card_h)
+	card_base.add_child(card_bg)
 
-	# 2. Rarity Tape (Top-Left: 96 x 42) — Text is already baked on texture
+	# 2. Rarity Tape (Top-Left: 90 x 28)
 	var rarity_str: String = perk.get("rarity", "COMMON").to_lower()
 	var tape_path := "res://UI/03_cards/tape_rarity_%s.png" % rarity_str
 	var tape_tex := UIAssets.create_texture_rect(tape_path)
-	tape_tex.position = Vector2(4, 2)
-	tape_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card_node.add_child(tape_tex)
+	tape_tex.position = Vector2(6, 4)
+	tape_tex.size = Vector2(90, 28)
+	card_base.add_child(tape_tex)
 
-	# 3. Gold Stamp Badge (Top-Right: 51 x 51)
-	var stamp_tex := UIAssets.create_texture_rect("res://UI/03_cards/card_stamp_gold_empty.png")
-	stamp_tex.position = Vector2(178, 2)
-	stamp_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card_node.add_child(stamp_tex)
+	# 3. Price Plate Tag (Top-Right: 68 x 28)
+	var price_plate := UIAssets.create_texture_rect("res://UI/03_cards/card_price_plate_empty.png")
+	price_plate.position = Vector2(card_w - 74, 4)
+	price_plate.size = Vector2(68, 28)
+	card_base.add_child(price_plate)
 
 	var cost_lbl := Label.new()
 	cost_lbl.text = "$%d" % perk.get("cost", 0)
 	cost_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	cost_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cost_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	cost_lbl.add_theme_color_override("font_color", Color(0.14, 0.10, 0.05))
-	cost_lbl.add_theme_font_size_override("font_size", 14)
-	stamp_tex.add_child(cost_lbl)
+	cost_lbl.add_theme_color_override("font_color", Color(0.98, 0.88, 0.25))
+	cost_lbl.add_theme_font_size_override("font_size", 13)
+	price_plate.add_child(cost_lbl)
 
-	# 4. Blueprint Art Icon in the center box (x: 25, y: 50, w: 186, h: 122)
+	# 4. Blueprint Display Area with Grid (x: 16, y: 44, w: 198, h: 120)
+	var grid_panel := PanelContainer.new()
+	grid_panel.position = Vector2(16, 44)
+	grid_panel.size = Vector2(198, 120)
+	var sb_grid := StyleBoxFlat.new()
+	sb_grid.bg_color = Color(0.08, 0.12, 0.18, 0.95)
+	sb_grid.border_color = Color(0.18, 0.24, 0.34)
+	sb_grid.set_border_width_all(1)
+	sb_grid.set_corner_radius_all(2)
+	grid_panel.add_theme_stylebox_override("panel", sb_grid)
+	card_base.add_child(grid_panel)
+
+	# Blueprint Camera / Fixture Screw at Top Center
+	var fixture_dot := ColorRect.new()
+	fixture_dot.position = Vector2(92, 4)
+	fixture_dot.size = Vector2(14, 6)
+	fixture_dot.color = Color(0.4, 0.45, 0.5)
+	grid_panel.add_child(fixture_dot)
+
+	# Icon in Center of Blueprint Box
 	var icon_lbl := Label.new()
 	var icon_map := {
 		"vest": "🦺",
@@ -335,231 +308,281 @@ func _build_card(perk: Dictionary) -> Control:
 		"piggy": "🐷",
 		"boots": "👟",
 		"magnet": "🧲",
-		"bag": "🛍",
+		"bag": "🎒",
 	}
 	icon_lbl.text = icon_map.get(perk.get("icon", ""), "📦")
-	icon_lbl.position = Vector2(25, 60)
-	icon_lbl.size = Vector2(186, 100)
+	icon_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	icon_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	icon_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	icon_lbl.add_theme_font_size_override("font_size", 42)
-	card_node.add_child(icon_lbl)
+	icon_lbl.add_theme_font_size_override("font_size", 38)
+	grid_panel.add_child(icon_lbl)
 
-	# 5. Item Name in the title banner (y: 182..214)
+	# 5. Item Name Banner (y: 172)
+	var name_box := PanelContainer.new()
+	name_box.position = Vector2(16, 172)
+	name_box.size = Vector2(198, 30)
+	var sb_n := StyleBoxFlat.new()
+	sb_n.bg_color = Color(0.18, 0.14, 0.10, 0.95)
+	sb_n.set_corner_radius_all(2)
+	name_box.add_theme_stylebox_override("panel", sb_n)
+	card_base.add_child(name_box)
+
 	var name_lbl := Label.new()
 	name_lbl.text = perk.get("name", "ITEM")
-	name_lbl.position = Vector2(18, 184)
-	name_lbl.size = Vector2(201, 30)
+	name_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	name_lbl.add_theme_color_override("font_color", Color(0.95, 0.92, 0.88))
-	name_lbl.add_theme_font_size_override("font_size", 15)
-	card_node.add_child(name_lbl)
+	name_lbl.add_theme_color_override("font_color", Color(0.96, 0.94, 0.90))
+	name_lbl.add_theme_font_size_override("font_size", 13)
+	name_box.add_child(name_lbl)
 
-	# 6. Description inside the light cream box (x: 24, y: 224, w: 189, h: 78)
-	var desc_box := MarginContainer.new()
-	desc_box.position = Vector2(24, 224)
-	desc_box.custom_minimum_size = Vector2(189, 78)
-	desc_box.size = Vector2(189, 78)
-
+	# 6. Description Text (y: 212)
 	var desc_lbl := Label.new()
 	desc_lbl.text = perk.get("desc", "")
+	desc_lbl.position = Vector2(18, 212)
+	desc_lbl.size = Vector2(194, 95)
+	desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	desc_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	desc_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	desc_lbl.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	desc_lbl.add_theme_color_override("font_color", Color(0.14, 0.14, 0.16))
+	desc_lbl.add_theme_color_override("font_color", Color(0.18, 0.18, 0.20))
 	desc_lbl.add_theme_font_size_override("font_size", 11)
-	desc_box.add_child(desc_lbl)
-	card_node.add_child(desc_box)
+	card_base.add_child(desc_lbl)
 
-	# 7. Serial Number (y: 308)
+	# 7. Serial Number Footer (y: 348)
 	var serial_lbl := Label.new()
 	serial_lbl.text = perk.get("serial", "")
-	serial_lbl.position = Vector2(20, 308)
-	serial_lbl.size = Vector2(197, 16)
+	serial_lbl.position = Vector2(16, 348)
+	serial_lbl.size = Vector2(198, 16)
 	serial_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	serial_lbl.add_theme_color_override("font_color", Color(0.42, 0.44, 0.48))
+	serial_lbl.add_theme_color_override("font_color", Color(0.45, 0.45, 0.48))
 	serial_lbl.add_theme_font_size_override("font_size", 9)
-	card_node.add_child(serial_lbl)
+	card_base.add_child(serial_lbl)
 
-	# 8. BUY Button using btn_yellow_bg.png (176 x 42) positioned at y: 328
+	# 8. BUY Button positioned BELOW the card (btn_buy_amber_wood.png)
 	var can_buy: bool = _player != null and _player.slop_credit >= perk.get("cost", 0)
 	var owned: bool = _player != null and perk.get("id", "") in _get_owned_perks()
 
 	var btn_txt := "✓ OWNED" if owned else ("BUY $%d" % perk.get("cost", 0))
 	var buy_btn := UIAssets.create_textured_button(
-		"res://UI/02_shop/btn_yellow_bg.png",
+		"res://UI/02_shop/btn_buy_amber_wood.png",
 		btn_txt,
-		15,
-		Color(0.14, 0.10, 0.05)
+		14,
+		Color(0.20, 0.14, 0.08),
+		"",
+		Vector2(210, 56)
 	)
-	buy_btn.position = Vector2(30.5, 328)
-	buy_btn.custom_minimum_size = Vector2(176, 42)
-	buy_btn.size = Vector2(176, 42)
-
-	if not can_buy or owned:
-		buy_btn.disabled = true
-	else:
-		buy_btn.pressed.connect(_on_buy_pressed.bind(perk.get("id", ""), perk.get("cost", 0)))
-
-	card_node.add_child(buy_btn)
+	buy_btn.position = Vector2(pos_x + 10, 436.0)
+	buy_btn.disabled = owned or (not can_buy)
+	buy_btn.pressed.connect(_on_buy_pressed.bind(perk, index))
+	_cards_container.add_child(buy_btn)
 	_buy_buttons.append(buy_btn)
 
-	return card_node
+	# Cyan highlight glow around button when focused/selected (like in Mockup 4 for center card)
+	var btn_glow := ReferenceRect.new()
+	btn_glow.set_anchors_preset(Control.PRESET_FULL_RECT)
+	btn_glow.border_color = Color(0.20, 0.65, 0.98, 1.0)
+	btn_glow.border_width = 2.5
+	btn_glow.editor_only = false
+	btn_glow.visible = (index == 1) # Highlight center card by default like Mockup 4
+	buy_btn.add_child(btn_glow)
+	_button_glows.append(btn_glow)
 
 
-# ---------------------------------------------------------------------------
-# Data / State
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# Bottom Bar (Reroll, Mossy Quote, Start Day)
+# ===========================================================================
+func _build_bottom_bar() -> void:
+	# 1. Reroll Button (Left: 250 x 58)
+	_reroll_btn = UIAssets.create_textured_button(
+		"res://UI/02_shop/btn_reroll_green_wood.png",
+		"🎲  REROLL ($%d)" % REROLL_COST,
+		14,
+		Color.WHITE,
+		"",
+		Vector2(240, 56)
+	)
+	_reroll_btn.position = Vector2(50, 648)
+	_reroll_btn.pressed.connect(_on_reroll_pressed)
+	_content.add_child(_reroll_btn)
 
+	# 2. Dialogue Strip in Center
+	var dlg_box := HBoxContainer.new()
+	dlg_box.position = Vector2(320, 656)
+	dlg_box.size = Vector2(620, 40)
+	dlg_box.alignment = BoxContainer.ALIGNMENT_CENTER
+	dlg_box.add_theme_constant_override("separation", 10)
+	_content.add_child(dlg_box)
+
+	var frog_icon := Label.new()
+	frog_icon.text = "🐸"
+	frog_icon.add_theme_font_size_override("font_size", 18)
+	dlg_box.add_child(frog_icon)
+
+	_dlg_label = Label.new()
+	_dlg_label.text = "Mossy: \"Pilih satu mod sebelum senja tiba, Ranger!\""
+	_dlg_label.add_theme_color_override("font_color", Color(0.95, 0.82, 0.40))
+	_dlg_label.add_theme_font_size_override("font_size", 13)
+	_dlg_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	dlg_box.add_child(_dlg_label)
+
+	# 3. Start Day Button on Right (302 x 82, fitted 260 x 56)
+	_start_btn = UIAssets.create_textured_button(
+		"res://UI/02_shop/btn_start_blue_wood.png",
+		"START DAY  →",
+		15,
+		Color.WHITE,
+		"",
+		Vector2(260, 56)
+	)
+	_start_btn.position = Vector2(965, 648)
+	_start_btn.pressed.connect(_on_start_day_pressed)
+	_content.add_child(_start_btn)
+
+
+# ===========================================================================
+# Shop Logic & Interactions
+# ===========================================================================
 func _refresh_offers() -> void:
-	var owned: Array = _get_owned_perks()
-	var available: Array[Dictionary] = []
-	for p in PERK_POOL:
-		if p["id"] not in owned:
-			available.append(p)
+	_current_offers.clear()
+	var unowned: Array[Dictionary] = []
+	var owned_ids := _get_owned_perks()
 
-	available.shuffle()
-	_current_offers = available.slice(0, min(3, available.size()))
+	for p in PERK_POOL:
+		if not (p.get("id", "") in owned_ids):
+			unowned.append(p)
+
+	unowned.shuffle()
+
+	# Pick 3 items (or fallback to pool if few left)
+	var count: int = mini(3, unowned.size())
+	for i in range(count):
+		_current_offers.append(unowned[i])
+
+	while _current_offers.size() < 3 and PERK_POOL.size() > 0:
+		var p = PERK_POOL[_current_offers.size() % PERK_POOL.size()]
+		if not (_current_offers.has(p)):
+			_current_offers.append(p)
+		else:
+			break
+
 	_rebuild_cards()
-	_refresh_header()
 
 
 func _refresh_header() -> void:
-	if _sc_label and _player:
-		_sc_label.text = "$%.0f" % _player.slop_credit
-	elif _sc_label:
-		_sc_label.text = "$0"
+	var funds: int = 14
+	if _player != null and "slop_credit" in _player:
+		funds = int(_player.slop_credit)
 
-	if _day_label and _dnc:
-		_day_label.text = "DAY %d / %d" % [_dnc.current_day, MAX_DAYS]
-	elif _day_label:
-		_day_label.text = "DAY 1 / %d" % MAX_DAYS
+	if is_instance_valid(_sc_label):
+		_sc_label.text = "$%d" % funds
 
-	if _dlg_label:
-		var day_idx := 0
-		if _dnc:
-			day_idx = clamp(_dnc.current_day - 1, 0, MOSSY_LINES.size() - 1)
-		_dlg_label.text = "🐸 Mossy: " + MOSSY_LINES[day_idx]
+	var cur_day: int = 1
+	if _dnc != null:
+		cur_day = _dnc.current_day
+	if is_instance_valid(_day_label):
+		_day_label.text = "DAY %02d / %02d" % [cur_day, MAX_DAYS]
 
-	if _reroll_btn:
-		var can_reroll: bool = _player != null and _player.slop_credit >= REROLL_COST
-		_reroll_btn.disabled = not can_reroll
+	if is_instance_valid(_reroll_btn):
+		_reroll_btn.disabled = (funds < REROLL_COST)
+
+
+func _on_buy_pressed(perk: Dictionary, card_index: int) -> void:
+	var cost: int = perk.get("cost", 0)
+	if _player == null or _player.slop_credit < cost:
+		_set_mossy_text("Mossy: \"Duitmu kurang, Ranger! Bersihkan sampah lagi!\"")
+		return
+
+	# Deduct cost
+	if _player.has_method("spend_slop_credit"):
+		_player.spend_slop_credit(float(cost))
+	else:
+		_player.slop_credit -= float(cost)
+	NetworkManager.broadcast_team_sc(-float(cost))
+
+	# Apply perk effect to player
+	_apply_perk_effect(perk.get("id", ""))
+
+	# Equip visual icon in GameHUD
+	var hud = get_tree().get_first_node_in_group("game_hud")
+	if hud and hud.has_method("equip_perk"):
+		var slot_idx: int = mini(card_index, 4)
+		hud.equip_perk(slot_idx, perk.get("id", ""))
+
+	emit_signal("item_purchased", perk.get("id", ""))
+
+	# Select this button glow
+	for i in range(_button_glows.size()):
+		if is_instance_valid(_button_glows[i]):
+			_button_glows[i].visible = (i == card_index)
+
+	_refresh_header()
+	_rebuild_cards()
+	_set_mossy_text("Mossy: \"Pilihan bagus! Mod %s terpasang!\"" % perk.get("name", ""))
+
+
+func _on_reroll_pressed() -> void:
+	if _player == null or _player.slop_credit < REROLL_COST:
+		_set_mossy_text("Mossy: \"Reroll butuh $%d, uangmu kurang!\"" % REROLL_COST)
+		return
+
+	if _player.has_method("spend_slop_credit"):
+		_player.spend_slop_credit(float(REROLL_COST))
+	else:
+		_player.slop_credit -= float(REROLL_COST)
+	NetworkManager.broadcast_team_sc(-float(REROLL_COST))
+
+	_refresh_offers()
+	_refresh_header()
+	_set_mossy_text("Mossy: \"Stok baru keluar dari gudang!\"")
+
+
+func _on_start_day_pressed() -> void:
+	emit_signal("day_started")
+	var tw := create_tween()
+	tw.tween_property(_root, "modulate:a", 0.0, 0.25)
+	tw.tween_callback(func():
+		var dnc = get_tree().get_first_node_in_group("day_night_cycle")
+		if dnc:
+			dnc.is_waiting_for_day_start = false
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+		queue_free()
+	)
+
+
+func _set_mossy_text(text: String) -> void:
+	if is_instance_valid(_dlg_label):
+		_dlg_label.text = text
 
 
 func _get_owned_perks() -> Array:
-	if _player and "owned_perks" in _player:
+	if _player != null and "owned_perks" in _player:
 		return _player.owned_perks
 	return []
 
 
-# ---------------------------------------------------------------------------
-# Button Callbacks
-# ---------------------------------------------------------------------------
-
-func _on_buy_pressed(perk_id: String, cost: int) -> void:
+func _apply_perk_effect(perk_id: String) -> void:
 	if _player == null:
 		return
-	if _player.slop_credit < cost:
-		return
-	var owned: Array = _get_owned_perks()
-	if perk_id in owned:
-		return
 
-	_player.slop_credit -= cost
-	if _player.has_signal("slop_credit_changed"):
-		_player.slop_credit_changed.emit(_player.slop_credit, -float(cost))
-
-	if "owned_perks" in _player:
+	if "owned_perks" in _player and not (perk_id in _player.owned_perks):
 		_player.owned_perks.append(perk_id)
 
-	_apply_perk(_player, perk_id)
-	_notify_hud_perk(perk_id)
-
-	item_purchased.emit(perk_id)
-	_refresh_header()
-	_rebuild_cards()
-
-
-func _on_reroll_pressed() -> void:
-	if _player == null:
-		return
-	if _player.slop_credit < REROLL_COST:
-		return
-	_player.slop_credit -= REROLL_COST
-	if _player.has_signal("slop_credit_changed"):
-		_player.slop_credit_changed.emit(_player.slop_credit, -float(REROLL_COST))
-	_refresh_offers()
-	_refresh_header()
-
-
-func _on_machine_shop_pressed() -> void:
-	if _player and _player.has_method("toggle_machine_menu"):
-		_player.toggle_machine_menu()
-	queue_free()
-
-
-func _on_start_day_pressed() -> void:
-	day_started.emit()
-	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
-	var needs_quota: bool = dnc != null and "is_waiting_for_day_start" in dnc and dnc.is_waiting_for_day_start
-
-	if _player and _player.has_method("toggle_buy_menu"):
-		_player.toggle_buy_menu()
-	else:
-		queue_free()
-
-	if needs_quota and dnc != null and dnc.has_method("open_quota_selection"):
-		dnc.open_quota_selection()
-
-
-# ---------------------------------------------------------------------------
-# Perk Application
-# ---------------------------------------------------------------------------
-
-func _apply_perk(player: Node, perk_id: String) -> void:
 	match perk_id:
 		"hivis_vest":
-			if "extra_mult_per_item" in player:
-				player.extra_mult_per_item += 0.15
+			if "streak_mult_bonus" in _player:
+				_player.streak_mult_bonus += 0.15
 		"can_crusher":
-			if "metal_weight_multiplier" in player:
-				player.metal_weight_multiplier = 1.5
+			if "metal_weight_mult" in _player:
+				_player.metal_weight_mult = 1.5
 		"piggy_jar":
-			if "piggy_jar_active" in player:
-				player.piggy_jar_active = true
+			if "has_piggy_bank" in _player:
+				_player.has_piggy_bank = true
 		"speed_boots":
-			if "base_speed" in player:
-				player.base_speed *= 1.20
+			if "speed_bonus" in _player:
+				_player.speed_bonus += 0.20
 		"magnet_glove":
-			if "pickup_range_bonus" in player:
-				player.pickup_range_bonus += 2.0
-			if "pickup_distance" in player:
-				player.pickup_distance += 2.0
-			if "pickup_ray" in player and player.pickup_ray != null:
-				player.pickup_ray.target_position = Vector3(0, 0, -player.pickup_distance)
+			if "pickup_range" in _player:
+				_player.pickup_range += 2.0
 		"big_bag":
-			if "max_bag_capacity" in player:
-				if player.max_bag_capacity <= 0:
-					player.max_bag_capacity = 10
-				else:
-					player.max_bag_capacity += 10
-
-
-func _notify_hud_perk(perk_id: String) -> void:
-	var hud = get_tree().get_first_node_in_group("game_hud")
-	if not hud:
-		return
-	if hud.has_method("equip_perk"):
-		var slot_map := {
-			"hivis_vest": 0,
-			"piggy_jar": 1,
-			"can_crusher": 2,
-			"speed_boots": 3,
-			"magnet_glove": 4,
-			"big_bag": 4,
-		}
-		if perk_id in slot_map:
-			hud.equip_perk(slot_map[perk_id], perk_id)
+			if "bag_capacity" in _player:
+				_player.bag_capacity += 10

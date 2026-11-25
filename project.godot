@@ -11,9 +11,15 @@ config_version=5
 [application]
 
 config/name="Gimrsia"
-run/main_scene="uid://cos885q21xo56"
+run/main_scene="uid://brjf5fa6flsr2"
 config/features=PackedStringArray("4.7", "C#", "GL Compatibility")
 config/icon="res://icon.svg"
+
+[autoload]
+
+Noray="*res://addons/netfox.noray/noray.gd"
+PacketHandshake="*res://addons/netfox.noray/packet-handshake.gd"
+NetworkManager="*res://network_manager.gd"
 
 [display]
 

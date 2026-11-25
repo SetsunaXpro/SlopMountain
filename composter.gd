@@ -214,10 +214,19 @@ func _finish_processing() -> void:
 	for i in range(compost_to_produce):
 		_spawn_compost(i)
 
+	if NetworkManager.is_multiplayer_active() and compost_to_produce > 0:
+		_rpc_spawn_outputs.rpc(compost_to_produce)
+
 	_is_processing = false
 	_process_timer = 0.0
 	processing_finished.emit(compost_to_produce)
 	_notify_player("✅ Produced %d Compost Bag(s)! Toss onto the ground to plant trees." % compost_to_produce)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_spawn_outputs(count: int) -> void:
+	for i in range(count):
+		_spawn_compost(i)
 
 
 func _spawn_compost(index: int) -> void:
