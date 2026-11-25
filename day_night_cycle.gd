@@ -785,19 +785,23 @@ func _setup_ui() -> void:
 	_win_big_earn_label.size = Vector2(310, 52)
 	win_paper.add_child(_win_big_earn_label)
 
-	# Solid Green Stamp Pill (zero wireframe outline)
+	# Authentic Angled Green Rubber Ink Stamp (Matching Figma Stamp-Shift-Selesai 188:88)
+	var stamp_ink := Color(0.114, 0.369, 0.220)
 	var win_stamp := Panel.new()
-	win_stamp.position = Vector2(394, 108)
-	win_stamp.size = Vector2(148, 38)
+	win_stamp.position = Vector2(390, 108)
+	win_stamp.size = Vector2(154, 34)
+	win_stamp.pivot_offset = win_stamp.size * 0.5
+	win_stamp.rotation_degrees = -2.0
 	var wssb := StyleBoxFlat.new()
-	wssb.bg_color = UIAssets.COL_GREEN
-	wssb.set_border_width_all(0)
-	wssb.set_corner_radius_all(6)
+	wssb.bg_color = Color(0.114, 0.369, 0.220, 0.10)
+	wssb.border_color = stamp_ink
+	wssb.set_border_width_all(2)
+	wssb.set_corner_radius_all(0)
 	win_stamp.add_theme_stylebox_override("panel", wssb)
 	win_paper.add_child(win_stamp)
 
 	var ws_lbl := UIAssets.create_label(
-		"✓  LULUS KUOTA", 13, Color.WHITE, "extrabold",
+		"✓  LULUS KUOTA", 13, stamp_ink, "black",
 		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 	)
 	ws_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)

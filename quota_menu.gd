@@ -397,21 +397,27 @@ func _build_standard_papers() -> void:
 		click_btn.pressed.connect(_on_contract_selected.bind(i))
 		card.add_child(click_btn)
 
-		# 1. Solid Paper Tier Pill (Top-Left, zero wireframe outline)
-		var tag_col: Color = data.get("tag_color", COL_BLUE)
+		# 1. Authentic Rubber Ink Stamp Difficulty Badge (Matching Figma 84:4)
+		var stamp_cols := [Color(0.114, 0.369, 0.220), Color(0.086, 0.329, 0.522), Color(0.580, 0.118, 0.086)]
+		var stamp_rots := [-2.0, -1.2, 1.8]
+		var stamp_widths := [126.0, 118.0, 134.0]
+		var ink_col: Color = stamp_cols[mini(i, 2)]
 		var stamp_box := Panel.new()
 		stamp_box.position = Vector2(28, 30)
-		stamp_box.size = Vector2(124, 26)
+		stamp_box.size = Vector2(stamp_widths[mini(i, 2)], 28)
+		stamp_box.pivot_offset = stamp_box.size * 0.5
+		stamp_box.rotation_degrees = stamp_rots[mini(i, 2)]
 		stamp_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		var ssb := StyleBoxFlat.new()
-		ssb.bg_color = tag_col
-		ssb.set_border_width_all(0)
-		ssb.set_corner_radius_all(5)
+		ssb.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+		ssb.border_color = ink_col
+		ssb.set_border_width_all(2)
+		ssb.set_corner_radius_all(0)
 		stamp_box.add_theme_stylebox_override("panel", ssb)
 		card.add_child(stamp_box)
 
 		var tag_lbl := UIAssets.create_label(
-			str(data["tag"]), 11, Color.WHITE, "extrabold",
+			str(data["tag"]), 12, ink_col, "black",
 			HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 		)
 		tag_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -419,7 +425,7 @@ func _build_standard_papers() -> void:
 
 		# 2. Mult / Selected Subtag (Top-Right, inset to clear corner tape)
 		var subtag_lbl := UIAssets.create_label(
-			str(data.get("mult_tag", "")), 11, COL_MUTED, "bold",
+			str(data.get("mult_tag", "")), 11, ink_col, "bold",
 			HORIZONTAL_ALIGNMENT_RIGHT, VERTICAL_ALIGNMENT_CENTER
 		)
 		subtag_lbl.position = Vector2(162, 28)
@@ -427,9 +433,10 @@ func _build_standard_papers() -> void:
 		card.add_child(subtag_lbl)
 		_subtag_labels.append(subtag_lbl)
 
-		# 3. Big Quota Target & Shift Duration
+		# 3. Big Quota Target & Shift Duration (Colored ink per tier matching Figma)
+		var quota_cols := [COL_DARK_TEXT, Color(0.055, 0.302, 0.478), Color(0.561, 0.106, 0.078)]
 		var quota_lbl := UIAssets.create_label(
-			"%.0f KG" % float(data["quota_target"]), 32, COL_DARK_TEXT, "black"
+			"%.0f KG" % float(data["quota_target"]), 32, quota_cols[mini(i, 2)], "black"
 		)
 		quota_lbl.position = Vector2(28, 86)
 		quota_lbl.size = Vector2(204, 44)
@@ -459,16 +466,17 @@ func _build_standard_papers() -> void:
 		m_desc.size = Vector2(244, 20)
 		card.add_child(m_desc)
 
-		# 5. Condition Row OR Soft-Tinted Hazard Strip (zero wireframe outline)
+		# 5. Condition Row OR Ink-Stamped Hazard Box (Matching Figma Warning-Ink-Stamp)
 		if data.has("condition_warning"):
 			var warn_box := Panel.new()
 			warn_box.position = Vector2(28, 229)
 			warn_box.size = Vector2(296, 40)
 			warn_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			var wsb := StyleBoxFlat.new()
-			wsb.bg_color = Color(0.76, 0.16, 0.14, 0.13)
-			wsb.set_border_width_all(0)
-			wsb.set_corner_radius_all(6)
+			wsb.bg_color = Color(0.580, 0.118, 0.086, 0.08)
+			wsb.border_color = Color(0.620, 0.122, 0.090, 0.92)
+			wsb.set_border_width_all(2)
+			wsb.set_corner_radius_all(0)
 			warn_box.add_theme_stylebox_override("panel", wsb)
 			card.add_child(warn_box)
 
@@ -519,28 +527,32 @@ func _build_boss_paper() -> void:
 	paper_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(paper_tex)
 
-	# 1. Solid Crimson Event Pill (Top-Left, zero wireframe outline)
+	# 1. Authentic Rubber Ink Stamp Event Badge (Matching Figma 119:10)
+	var boss_ink := Color(0.580, 0.118, 0.086)
 	var stamp := Panel.new()
 	stamp.position = Vector2(30, 28)
 	stamp.size = Vector2(168, 28)
+	stamp.pivot_offset = stamp.size * 0.5
+	stamp.rotation_degrees = -2.0
 	stamp.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var ssb := StyleBoxFlat.new()
-	ssb.bg_color = COL_RED
-	ssb.set_border_width_all(0)
-	ssb.set_corner_radius_all(5)
+	ssb.bg_color = Color(0.0, 0.0, 0.0, 0.0)
+	ssb.border_color = boss_ink
+	ssb.set_border_width_all(2)
+	ssb.set_corner_radius_all(0)
 	stamp.add_theme_stylebox_override("panel", ssb)
 	card.add_child(stamp)
 
 	var tag_lbl := UIAssets.create_label(
-		str(data["tag"]), 11, Color.WHITE, "extrabold",
+		str(data["tag"]), 12, boss_ink, "black",
 		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 	)
 	tag_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	stamp.add_child(tag_lbl)
 
-	# 2. Clean Wajib Label (Top-Right, no noisy multi-line eyebrow)
+	# 2. Clean Wajib Label (Top-Right)
 	var subtag_lbl := UIAssets.create_label(
-		"Event Wajib", 12, COL_RED, "bold",
+		"Event Wajib", 12, boss_ink, "bold",
 		HORIZONTAL_ALIGNMENT_RIGHT, VERTICAL_ALIGNMENT_CENTER
 	)
 	subtag_lbl.position = Vector2(226, 28)
@@ -596,15 +608,16 @@ func _build_boss_paper() -> void:
 	)
 	card.add_child(ev_desc)
 
-	# 5. Soft Crimson Rule Warning Strip (zero wireframe outline)
+	# 5. Ink-Stamped Boss Warning Box (Matching Figma Warning-Ink-Stamp)
 	var warn_box := Panel.new()
 	warn_box.position = Vector2(30, 220)
 	warn_box.size = Vector2(400, 48)
 	warn_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var wsb := StyleBoxFlat.new()
-	wsb.bg_color = Color(0.76, 0.16, 0.14, 0.13)
-	wsb.set_border_width_all(0)
-	wsb.set_corner_radius_all(6)
+	wsb.bg_color = Color(0.580, 0.118, 0.086, 0.08)
+	wsb.border_color = Color(0.620, 0.122, 0.090, 0.92)
+	wsb.set_border_width_all(2)
+	wsb.set_corner_radius_all(0)
 	warn_box.add_theme_stylebox_override("panel", wsb)
 	card.add_child(warn_box)
 
@@ -776,13 +789,14 @@ func _update_contract_selection_visuals() -> void:
 		if paper_tex:
 			paper_tex.modulate = Color(1.03, 1.02, 0.99, 1.0) if is_sel else Color(0.90, 0.88, 0.85, 1.0)
 
+	var tier_inks := [Color(0.114, 0.369, 0.220), Color(0.086, 0.329, 0.522), Color(0.580, 0.118, 0.086)]
 	for i in range(_subtag_labels.size()):
 		var sl: Label = _subtag_labels[i]
 		if is_instance_valid(sl) and i < _contracts_data.size():
 			var is_sel := (i == _selected_index)
 			var base_mult: String = str(_contracts_data[i].get("mult_tag", ""))
 			sl.text = (base_mult + "\n✓ DIPILIH") if is_sel else base_mult
-			sl.add_theme_color_override("font_color", COL_BLUE if is_sel else COL_MUTED)
+			sl.add_theme_color_override("font_color", tier_inks[mini(i, 2)])
 
 	var is_mp := (NetworkManager != null and NetworkManager.is_multiplayer_active())
 	for i in range(_pilih_buttons.size()):

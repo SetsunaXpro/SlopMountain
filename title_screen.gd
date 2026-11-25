@@ -127,79 +127,74 @@ func _build_ui() -> void:
 	_logo_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_content.add_child(_logo_tex)
 
-	# 3. Main Menu Wood Plank Buttons (Positioned cleanly below logo & above y=676 footer)
-	var start_btn := UIAssets.create_wood_button(
+	# 3. Main Menu Wood Plank Buttons (Dark weathered wood resting state; lights up to sunlit amber on hover)
+	var start_btn := _create_title_plank_btn(
+		"res://UI/04_title/title_btn_primary_normal.png",
 		"res://UI/04_title/title_btn_primary_hover.png",
 		"START SHIFT  ➔",
 		19,
+		UIAssets.COL_CREAM,
 		Color(0.20, 0.12, 0.05),
-		"",
-		"black",
+		Vector2(346, 80),
+		Vector2(48, 224),
 		5
 	)
-	start_btn.position = Vector2(48, 224)
-	start_btn.custom_minimum_size = Vector2(346, 80)
-	start_btn.size = Vector2(346, 80)
 	start_btn.pressed.connect(_on_start_shift_pressed)
 	_content.add_child(start_btn)
 
-	var challenge_btn := UIAssets.create_wood_button(
-		"res://UI/04_title/title_btn_quit_normal.png",
-		"CHALLENGE MODE  🔥",
+	var challenge_btn := _create_title_plank_btn(
+		"res://UI/04_title/title_btn_secondary_normal.png",
+		"res://UI/04_title/title_btn_secondary_hover.png",
+		"CHALLENGE MODE",
 		15,
-		Color(1.0, 0.84, 0.42),
-		"res://UI/04_title/title_btn_quit_hover_red.png",
-		"black",
+		UIAssets.COL_CREAM,
+		Color(0.20, 0.12, 0.05),
+		Vector2(314, 70),
+		Vector2(52, 300),
 		4
 	)
-	challenge_btn.position = Vector2(52, 298)
-	challenge_btn.custom_minimum_size = Vector2(326, 72)
-	challenge_btn.size = Vector2(326, 72)
 	challenge_btn.pressed.connect(_on_challenge_mode_pressed)
 	_content.add_child(challenge_btn)
 
-	var htp_btn := UIAssets.create_wood_button(
+	var htp_btn := _create_title_plank_btn(
 		"res://UI/04_title/title_btn_secondary_normal.png",
+		"res://UI/04_title/title_btn_secondary_hover.png",
 		"HOW TO PLAY",
 		15,
 		UIAssets.COL_CREAM,
-		"res://UI/04_title/title_btn_secondary_hover.png",
-		"black",
+		Color(0.20, 0.12, 0.05),
+		Vector2(314, 70),
+		Vector2(52, 364),
 		4
 	)
-	htp_btn.position = Vector2(52, 364)
-	htp_btn.custom_minimum_size = Vector2(314, 70)
-	htp_btn.size = Vector2(314, 70)
 	htp_btn.pressed.connect(_on_how_to_play_pressed)
 	_content.add_child(htp_btn)
 
-	var settings_btn := UIAssets.create_wood_button(
+	var settings_btn := _create_title_plank_btn(
 		"res://UI/04_title/title_btn_secondary_normal.png",
+		"res://UI/04_title/title_btn_secondary_hover.png",
 		"SETTINGS",
 		15,
 		UIAssets.COL_CREAM,
-		"res://UI/04_title/title_btn_secondary_hover.png",
-		"black",
+		Color(0.20, 0.12, 0.05),
+		Vector2(314, 70),
+		Vector2(52, 428),
 		4
 	)
-	settings_btn.position = Vector2(52, 428)
-	settings_btn.custom_minimum_size = Vector2(314, 70)
-	settings_btn.size = Vector2(314, 70)
 	settings_btn.pressed.connect(_on_settings_pressed)
 	_content.add_child(settings_btn)
 
-	var credits_btn := UIAssets.create_wood_button(
+	var credits_btn := _create_title_plank_btn(
 		"res://UI/04_title/title_btn_secondary_normal.png",
+		"res://UI/04_title/title_btn_secondary_hover.png",
 		"CREDITS",
 		15,
 		UIAssets.COL_CREAM,
-		"res://UI/04_title/title_btn_secondary_hover.png",
-		"black",
+		Color(0.20, 0.12, 0.05),
+		Vector2(314, 70),
+		Vector2(52, 492),
 		4
 	)
-	credits_btn.position = Vector2(52, 492)
-	credits_btn.custom_minimum_size = Vector2(314, 70)
-	credits_btn.size = Vector2(314, 70)
 	credits_btn.pressed.connect(_on_credits_pressed)
 	_content.add_child(credits_btn)
 
@@ -243,6 +238,34 @@ func _build_ui() -> void:
 	modal_dim.set_anchors_preset(Control.PRESET_FULL_RECT)
 	modal_dim.color = Color(0.03, 0.05, 0.08, 0.76)
 	_modal_overlay.add_child(modal_dim)
+
+
+func _create_title_plank_btn(
+	normal_path: String,
+	hover_path: String,
+	title_text: String,
+	font_size: int,
+	normal_col: Color,
+	hover_col: Color,
+	btn_size: Vector2,
+	btn_pos: Vector2,
+	bottom_inset: int
+) -> Button:
+	var btn := UIAssets.create_wood_button(
+		normal_path, title_text, font_size, normal_col, hover_path, "black", bottom_inset
+	)
+	btn.position = btn_pos
+	btn.custom_minimum_size = btn_size
+	btn.size = btn_size
+	btn.add_theme_color_override("font_hover_color", hover_col)
+	btn.add_theme_color_override("font_pressed_color", hover_col)
+	btn.mouse_entered.connect(func():
+		btn.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.0))
+	)
+	btn.mouse_exited.connect(func():
+		btn.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.50))
+	)
+	return btn
 
 
 func _build_coop_panel() -> void:

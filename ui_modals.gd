@@ -54,9 +54,9 @@ static func _build_dim_scrim(parent: Control, alpha: float = 0.72) -> ColorRect:
 
 
 static func _build_wide_modal_shell(content: Control, title_text: String) -> Dictionary:
-	# Corkboard visual bounds: (250, 98, 780x540). PNG is 828x588 (24px shadow padding).
+	# Corkboard visual bounds: (250, 98, 779x540). PNG is 828x588 with solid_bbox (24, 12, 802, 551).
 	var board_tex := UIAssets.create_texture_rect("res://UI/05_modals/modal_corkboard_wide.png")
-	board_tex.position = Vector2(226, 74)
+	board_tex.position = Vector2(226, 86)
 	board_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	content.add_child(board_tex)
 
@@ -65,7 +65,7 @@ static func _build_wide_modal_shell(content: Control, title_text: String) -> Dic
 	board.size = Vector2(780, 540)
 	content.add_child(board)
 
-	# Floating Header Slab (380x54) centered at top edge
+	# Floating Header Slab (380x54) centered cleanly on top dark wood rail
 	var hdr_tex := UIAssets.create_texture_rect("res://UI/05_modals/header_slab_modal_med.png")
 	hdr_tex.position = Vector2(200, -26)
 	hdr_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -78,15 +78,15 @@ static func _build_wide_modal_shell(content: Control, title_text: String) -> Dic
 	hdr_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hdr_tex.add_child(hdr_lbl)
 
-	# Wide Torn Paper visual bounds inside board: (40, 54, 700x384). PNG is 732x417.
+	# Wide Torn Paper visual bounds inside board: (40, 54, 695x387). PNG solid_bbox (19, 12, 713, 398).
 	var paper_tex := UIAssets.create_texture_rect("res://UI/05_modals/paper_modal_wide_empty.png")
-	paper_tex.position = Vector2(24, 42)
+	paper_tex.position = Vector2(21, 42)
 	paper_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	board.add_child(paper_tex)
 
 	var paper := Control.new()
 	paper.position = Vector2(40, 54)
-	paper.size = Vector2(700, 384)
+	paper.size = Vector2(695, 384)
 	board.add_child(paper)
 
 	return {"board": board, "paper": paper}
@@ -431,13 +431,13 @@ class HowToPlayOverlay extends CanvasLayer:
 			"res://UI/05_modals/btn_modal_blue_wood.png",
 			"MENGERTI  ➔", 16, Color(0.20, 0.12, 0.05), "", "black", 5
 		)
-		btn_ok.position = Vector2(484, 446)
+		btn_ok.position = Vector2(480, 444)
 		btn_ok.pressed.connect(queue_free)
 		board.add_child(btn_ok)
 
 
 # ===========================================================================
-# 3. Settings Popup (Interactive Audio Sliders + Fullscreen & Screen Shake)
+# 3. Settings Popup (1:1 Figma popup_settings layout: Audio + Display + Reset Default)
 # ===========================================================================
 
 class SettingsOverlay extends CanvasLayer:
@@ -445,6 +445,7 @@ class SettingsOverlay extends CanvasLayer:
 
 	var _toggle_fs_btn: Button = null
 	var _toggle_shake_btn: Button = null
+	var _slider_refs: Dictionary = {}
 
 	func _ready() -> void:
 		layer = 110
@@ -481,94 +482,82 @@ class SettingsOverlay extends CanvasLayer:
 		var board: Control = shell["board"]
 		var paper: Control = shell["paper"]
 
-		var vline := ColorRect.new()
-		vline.position = Vector2(362, 28)
-		vline.size = Vector2(2, 316)
-		vline.color = Color(0.55, 0.48, 0.38, 0.35)
-		paper.add_child(vline)
-
-		# --- LEFT COLUMN: AUDIO ---
-		var col1 := UIAssets.create_label("AUDIO", 15, Color(0.28, 0.18, 0.10), "black")
-		col1.position = Vector2(26, 26)
-		col1.size = Vector2(310, 22)
-		paper.add_child(col1)
+		# --- TOP SECTION: AUDIO & VOLUME (Single-column matching Figma 189:92) ---
+		var sec_audio := UIAssets.create_label("AUDIO & VOLUME", 14, Color(0.20, 0.14, 0.08), "black")
+		sec_audio.position = Vector2(36, 26)
+		sec_audio.size = Vector2(300, 20)
+		paper.add_child(sec_audio)
 
 		var h1 := ColorRect.new()
-		h1.position = Vector2(26, 52)
-		h1.size = Vector2(312, 2)
-		h1.color = Color(0.32, 0.24, 0.16, 0.45)
+		h1.position = Vector2(36, 52)
+		h1.size = Vector2(624, 2)
+		h1.color = Color(0.32, 0.24, 0.16, 0.42)
 		paper.add_child(h1)
 
-		_add_industrial_slider(paper, "MASTER VOLUME", "master_vol", 76)
-		_add_industrial_slider(paper, "MUSIC / BGM",   "music_vol",  162)
-		_add_industrial_slider(paper, "SFX / EFEK",    "sfx_vol",    248)
+		_add_industrial_slider(paper, "MASTER VOLUME",       "master_vol", 74)
+		_add_industrial_slider(paper, "MUSIC (BGM)",         "music_vol",  122)
+		_add_industrial_slider(paper, "SOUND EFFECTS (SFX)", "sfx_vol",    170)
 
-		# --- RIGHT COLUMN: TAMPILAN & KONTROL ---
-		var col2 := UIAssets.create_label("TAMPILAN & KONTROL", 15, Color(0.28, 0.18, 0.10), "black")
-		col2.position = Vector2(384, 26)
-		col2.size = Vector2(290, 22)
-		paper.add_child(col2)
+		# Dashed horizontal divider between Audio and Display sections
+		var dash_x: float = 36.0
+		while dash_x < 656.0:
+			var dash := ColorRect.new()
+			dash.position = Vector2(dash_x, 212)
+			dash.size = Vector2(minf(8.0, 660.0 - dash_x), 2)
+			dash.color = Color(0.45, 0.37, 0.28, 0.40)
+			paper.add_child(dash)
+			dash_x += 14.0
 
-		var h2 := ColorRect.new()
-		h2.position = Vector2(384, 52)
-		h2.size = Vector2(290, 2)
-		h2.color = Color(0.32, 0.24, 0.16, 0.45)
-		paper.add_child(h2)
+		# --- BOTTOM SECTION: TAMPILAN & AKSESIBILITAS ---
+		var sec_disp := UIAssets.create_label("TAMPILAN & AKSESIBILITAS", 14, Color(0.20, 0.14, 0.08), "black")
+		sec_disp.position = Vector2(36, 232)
+		sec_disp.size = Vector2(340, 20)
+		paper.add_child(sec_disp)
 
-		var fs_lbl := UIAssets.create_label("FULLSCREEN", 14, UIAssets.COL_INK, "black")
-		fs_lbl.position = Vector2(384, 84)
-		fs_lbl.size = Vector2(180, 24)
+		var fs_lbl := UIAssets.create_label("FULLSCREEN MODE", 13, UIAssets.COL_INK, "black")
+		fs_lbl.position = Vector2(36, 264)
+		fs_lbl.size = Vector2(260, 20)
 		paper.add_child(fs_lbl)
 
-		var fs_sub := UIAssets.create_label("Layar penuh 1280×720", 11, UIAssets.COL_INK_MUTED, "semibold")
-		fs_sub.position = Vector2(384, 108)
-		fs_sub.size = Vector2(180, 18)
+		var fs_sub := UIAssets.create_label("Tampilkan layar penuh (1280×720 skala otomatis)", 11, UIAssets.COL_INK_MUTED, "semibold")
+		fs_sub.position = Vector2(36, 283)
+		fs_sub.size = Vector2(440, 18)
 		paper.add_child(fs_sub)
 
 		_toggle_fs_btn = _create_toggle_button(bool(UIAssets.settings["fullscreen"]))
-		_toggle_fs_btn.position = Vector2(568, 86)
+		_toggle_fs_btn.position = Vector2(556, 266)
 		_toggle_fs_btn.pressed.connect(_on_toggle_fullscreen)
 		paper.add_child(_toggle_fs_btn)
 
-		var sh_lbl := UIAssets.create_label("SCREEN SHAKE", 14, UIAssets.COL_INK, "black")
-		sh_lbl.position = Vector2(384, 166)
-		sh_lbl.size = Vector2(180, 24)
+		var sh_lbl := UIAssets.create_label("SCREEN SHAKE", 13, UIAssets.COL_INK, "black")
+		sh_lbl.position = Vector2(36, 314)
+		sh_lbl.size = Vector2(260, 20)
 		paper.add_child(sh_lbl)
 
-		var sh_sub := UIAssets.create_wrapped_label(
-			"Efek getar saat melempar / longsor", Vector2(384, 190), Vector2(178, 34),
-			11, UIAssets.COL_INK_MUTED, "semibold",
-			HORIZONTAL_ALIGNMENT_LEFT, VERTICAL_ALIGNMENT_TOP
-		)
+		var sh_sub := UIAssets.create_label("Efek getar kamera saat longsor & buang sampah besar", 11, UIAssets.COL_INK_MUTED, "semibold")
+		sh_sub.position = Vector2(36, 333)
+		sh_sub.size = Vector2(440, 18)
 		paper.add_child(sh_sub)
 
 		_toggle_shake_btn = _create_toggle_button(bool(UIAssets.settings["screen_shake"]))
-		_toggle_shake_btn.position = Vector2(568, 168)
+		_toggle_shake_btn.position = Vector2(556, 316)
 		_toggle_shake_btn.pressed.connect(_on_toggle_shake)
 		paper.add_child(_toggle_shake_btn)
 
-		var info_box := Panel.new()
-		info_box.position = Vector2(384, 248)
-		info_box.size = Vector2(288, 62)
-		var isb := StyleBoxFlat.new()
-		isb.bg_color = Color(0.86, 0.80, 0.68, 0.85)
-		isb.set_border_width_all(0)
-		isb.set_corner_radius_all(8)
-		info_box.add_theme_stylebox_override("panel", isb)
-		paper.add_child(info_box)
-
-		var p_v := UIAssets.create_label(
-			"Kontrol: Keyboard (WASD) + Mouse", 13, UIAssets.COL_INK, "bold",
-			HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
+		# --- BOTTOM BUTTONS (Flush left/right with torn paper edges, centered in lower board margin) ---
+		var btn_reset := UIAssets.create_wood_button(
+			"res://UI/05_modals/btn_modal_brown_wood.png",
+			"RESET DEFAULT", 14, UIAssets.COL_CREAM, "", "black", 5
 		)
-		p_v.set_anchors_preset(Control.PRESET_FULL_RECT)
-		info_box.add_child(p_v)
+		btn_reset.position = Vector2(23, 444)
+		btn_reset.pressed.connect(_on_reset_defaults)
+		board.add_child(btn_reset)
 
 		var btn_save := UIAssets.create_wood_button(
 			"res://UI/05_modals/btn_modal_blue_wood.png",
 			"SIMPAN & TUTUP", 15, Color(0.20, 0.12, 0.05), "", "black", 5
 		)
-		btn_save.position = Vector2(484, 446)
+		btn_save.position = Vector2(480, 444)
 		btn_save.pressed.connect(func():
 			UIAssets.save_settings()
 			queue_free()
@@ -578,25 +567,17 @@ class SettingsOverlay extends CanvasLayer:
 	func _add_industrial_slider(paper: Control, label_text: String, key: String, pos_y: float) -> void:
 		var val: float = float(UIAssets.settings.get(key, 0.8))
 
-		var title := UIAssets.create_label(label_text, 13, UIAssets.COL_INK, "black")
-		title.position = Vector2(26, pos_y)
-		title.size = Vector2(220, 20)
+		var title := UIAssets.create_label(label_text, 13, UIAssets.COL_INK, "bold")
+		title.position = Vector2(36, pos_y)
+		title.size = Vector2(216, 24)
 		paper.add_child(title)
 
-		var pct_lbl := UIAssets.create_label(
-			"%d%%" % int(round(val * 100.0)), 13, UIAssets.COL_BLUE_INK, "mono",
-			HORIZONTAL_ALIGNMENT_RIGHT, VERTICAL_ALIGNMENT_CENTER
-		)
-		pct_lbl.position = Vector2(246, pos_y)
-		pct_lbl.size = Vector2(90, 20)
-		paper.add_child(pct_lbl)
-
 		var track := UIAssets.create_texture_rect("res://UI/05_modals/slider_track_bg.png")
-		track.position = Vector2(26, pos_y + 30)
+		track.position = Vector2(266, pos_y + 4)
 		paper.add_child(track)
 
 		var fill_bar := TextureProgressBar.new()
-		fill_bar.position = Vector2(28, pos_y + 32)
+		fill_bar.position = Vector2(268, pos_y + 6)
 		fill_bar.size = Vector2(306, 12)
 		fill_bar.min_value = 0.0
 		fill_bar.max_value = 1.0
@@ -606,8 +587,16 @@ class SettingsOverlay extends CanvasLayer:
 		fill_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		paper.add_child(fill_bar)
 
+		var pct_lbl := UIAssets.create_label(
+			"%d%%" % int(round(val * 100.0)), 14, UIAssets.COL_INK, "black",
+			HORIZONTAL_ALIGNMENT_RIGHT, VERTICAL_ALIGNMENT_CENTER
+		)
+		pct_lbl.position = Vector2(590, pos_y)
+		pct_lbl.size = Vector2(70, 24)
+		paper.add_child(pct_lbl)
+
 		var slider := HSlider.new()
-		slider.position = Vector2(26, pos_y + 24)
+		slider.position = Vector2(266, pos_y - 2)
 		slider.size = Vector2(310, 28)
 		slider.min_value = 0.0
 		slider.max_value = 1.0
@@ -632,17 +621,18 @@ class SettingsOverlay extends CanvasLayer:
 			UIAssets.apply_settings()
 		)
 		paper.add_child(slider)
+		_slider_refs[key] = {"slider": slider, "fill": fill_bar, "pct": pct_lbl}
 
 	func _create_toggle_button(is_on: bool) -> Button:
 		var path := "res://UI/05_modals/toggle_btn_on.png" if is_on else "res://UI/05_modals/toggle_btn_off.png"
-		var txt := "ON" if is_on else "OFF"
+		var txt := "✓  ON" if is_on else "✕  OFF"
 		var col := Color.WHITE if is_on else Color(0.75, 0.78, 0.82)
 		return UIAssets.create_wood_button(path, txt, 13, col, "", "black", 0)
 
 	func _refresh_toggle_visual(btn: Button, is_on: bool) -> void:
 		var path := "res://UI/05_modals/toggle_btn_on.png" if is_on else "res://UI/05_modals/toggle_btn_off.png"
 		var tex := UIAssets.get_tex(path)
-		btn.text = "ON" if is_on else "OFF"
+		btn.text = "✓  ON" if is_on else "✕  OFF"
 		btn.add_theme_color_override("font_color", Color.WHITE if is_on else Color(0.75, 0.78, 0.82))
 		if tex:
 			for state in ["normal", "hover", "pressed"]:
@@ -660,6 +650,23 @@ class SettingsOverlay extends CanvasLayer:
 	func _on_toggle_shake() -> void:
 		UIAssets.settings["screen_shake"] = not bool(UIAssets.settings["screen_shake"])
 		_refresh_toggle_visual(_toggle_shake_btn, bool(UIAssets.settings["screen_shake"]))
+
+	func _on_reset_defaults() -> void:
+		UIAssets.settings["master_vol"] = 0.80
+		UIAssets.settings["music_vol"] = 0.70
+		UIAssets.settings["sfx_vol"] = 0.90
+		UIAssets.settings["fullscreen"] = false
+		UIAssets.settings["screen_shake"] = true
+		for k in ["master_vol", "music_vol", "sfx_vol"]:
+			if _slider_refs.has(k):
+				var v: float = float(UIAssets.settings[k])
+				_slider_refs[k]["slider"].set_value_no_signal(v)
+				_slider_refs[k]["fill"].value = v
+				_slider_refs[k]["pct"].text = "%d%%" % int(round(v * 100.0))
+		_refresh_toggle_visual(_toggle_fs_btn, false)
+		_refresh_toggle_visual(_toggle_shake_btn, true)
+		UIAssets.apply_settings()
+		UIAssets.save_settings()
 
 
 # ===========================================================================
@@ -760,6 +767,6 @@ class CreditsOverlay extends CanvasLayer:
 			"res://UI/05_modals/btn_modal_brown_wood.png",
 			"TUTUP", 16, UIAssets.COL_CREAM, "", "black", 5
 		)
-		btn_close.position = Vector2(504, 446)
+		btn_close.position = Vector2(500, 444)
 		btn_close.pressed.connect(queue_free)
 		board.add_child(btn_close)
