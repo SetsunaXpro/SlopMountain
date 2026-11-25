@@ -488,7 +488,7 @@ func _build_standard_papers() -> void:
 		var btn_path := "res://UI/02_shop/btn_contract_blue_wood.png" if is_sel else "res://UI/02_shop/btn_contract_brown_wood.png"
 		var btn_txt := "✓  KONTRAK DIPILIH" if is_sel else "PILIH KONTRAK"
 		var pilih_btn := UIAssets.create_wood_button(
-			btn_path, btn_txt, 14, Color.WHITE if is_sel else UIAssets.COL_CREAM, "", "black", 5
+			btn_path, btn_txt, 14, Color(0.20, 0.12, 0.05) if is_sel else UIAssets.COL_CREAM, "", "black", 5
 		)
 		pilih_btn.position = Vector2(12, 358)
 		pilih_btn.pressed.connect(_on_contract_selected.bind(i))
@@ -701,7 +701,7 @@ func _build_bottom_bar() -> void:
 	var tag_title: String = str(active_event_data.get("tag", "AUDIT"))
 	var btn_title := ("MULAI %s  ➔" % tag_title) if is_boss_day else "MULAI SHIFT  ➔"
 	_start_shift_btn = UIAssets.create_wood_button(
-		btn_tex, btn_title, 15, COL_WHITE, "", "black", 5
+		btn_tex, btn_title, 15, COL_WHITE if is_boss_day else Color(0.20, 0.12, 0.05), "", "black", 5
 	)
 	_start_shift_btn.position = Vector2(950, 638)
 	_start_shift_btn.pressed.connect(_on_start_shift_confirmed)
@@ -791,7 +791,11 @@ func _update_contract_selection_visuals() -> void:
 			var is_sel := (i == _selected_index)
 			if not is_mp:
 				btn.text = "✓  KONTRAK DIPILIH" if is_sel else "PILIH KONTRAK"
-			btn.add_theme_color_override("font_color", Color.WHITE if is_sel else UIAssets.COL_CREAM)
+			var sel_col := Color(0.20, 0.12, 0.05) if is_sel else UIAssets.COL_CREAM
+			btn.add_theme_color_override("font_color", sel_col)
+			btn.add_theme_color_override("font_hover_color", sel_col if is_sel else Color.WHITE)
+			btn.add_theme_color_override("font_focus_color", sel_col)
+			btn.add_theme_color_override("font_shadow_color", Color(0.0, 0.0, 0.0, 0.0 if is_sel else 0.50))
 			var tex_p := "res://UI/02_shop/btn_contract_blue_wood.png" if is_sel else "res://UI/02_shop/btn_contract_brown_wood.png"
 			var tex := UIAssets.get_tex(tex_p)
 			if tex:

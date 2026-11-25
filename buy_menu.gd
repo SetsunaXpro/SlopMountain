@@ -418,12 +418,12 @@ func _build_bottom_bar() -> void:
 	_machines_btn.pressed.connect(_on_machine_shop_pressed)
 	_content.add_child(_machines_btn)
 
-	# 3. Start Day / Resume Shift Button (Right: native 302 x 82)
+	# 3. Start Day / Resume Shift Button (Right: native 302 x 82 sunlit amber wood)
 	_start_btn = UIAssets.create_wood_button(
 		"res://UI/02_shop/btn_start_blue_wood.png",
 		"START DAY  ➔",
 		16,
-		Color.WHITE,
+		Color(0.20, 0.12, 0.05),
 		"",
 		"black",
 		5

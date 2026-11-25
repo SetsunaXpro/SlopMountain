@@ -196,7 +196,7 @@ class PauseMenuOverlay extends CanvasLayer:
 		# 1. RESUME SHIFT
 		var btn_resume := UIAssets.create_wood_button(
 			"res://UI/05_modals/btn_ending_blue_wood.png",
-			"RESUME SHIFT  ➔", 17, Color.WHITE, "", "black", 5
+			"RESUME SHIFT  ➔", 17, Color(0.20, 0.12, 0.05), "", "black", 5
 		)
 		btn_resume.position = Vector2(74, 108)
 		btn_resume.pressed.connect(_on_resume)
@@ -356,7 +356,7 @@ class HowToPlayOverlay extends CanvasLayer:
 			["WASD / SPC", "Gerak 3D & melompat naik di lereng gunung"],
 			["KLIK KIRI",  "Tahan untuk capit & masukkan sampah ke tas"],
 			["RMB / [G]",  "Equip sampah granat [G] & lempar (Klik Kanan)"],
-			["E / C / M",  "[E] Interact, [1-3]+[C] Build, [M] Beli Mesin"],
+			["E / C / M",  "[E] Interact, [1-6]+[C] Build, [M] Beli Mesin"],
 			["B / Q / N",  "[B] Mod Shop, [Q] Kontrak, tahan [N] End Day"],
 		]
 		for i in range(controls.size()):
@@ -429,7 +429,7 @@ class HowToPlayOverlay extends CanvasLayer:
 
 		var btn_ok := UIAssets.create_wood_button(
 			"res://UI/05_modals/btn_modal_blue_wood.png",
-			"MENGERTI  ➔", 16, Color.WHITE, "", "black", 5
+			"MENGERTI  ➔", 16, Color(0.20, 0.12, 0.05), "", "black", 5
 		)
 		btn_ok.position = Vector2(484, 446)
 		btn_ok.pressed.connect(queue_free)
@@ -566,7 +566,7 @@ class SettingsOverlay extends CanvasLayer:
 
 		var btn_save := UIAssets.create_wood_button(
 			"res://UI/05_modals/btn_modal_blue_wood.png",
-			"SIMPAN & TUTUP", 15, Color.WHITE, "", "black", 5
+			"SIMPAN & TUTUP", 15, Color(0.20, 0.12, 0.05), "", "black", 5
 		)
 		btn_save.position = Vector2(484, 446)
 		btn_save.pressed.connect(func():

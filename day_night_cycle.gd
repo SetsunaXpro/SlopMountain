@@ -710,7 +710,7 @@ func _setup_ui() -> void:
 	# Corner persistent Next Day button (visible at night if player explores in dark)
 	_hud_corner_next_btn = UIAssets.create_wood_button(
 		"res://UI/05_modals/btn_modal_blue_wood.png",
-		"LANJUT HARI  ➔", 13, Color.WHITE, "", "black", 4
+		"LANJUT HARI  ➔", 13, Color(0.20, 0.12, 0.05), "", "black", 4
 	)
 	_hud_corner_next_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	_hud_corner_next_btn.offset_left = -224
@@ -823,7 +823,7 @@ func _setup_ui() -> void:
 	# Win Bottom Buttons
 	_night_next_btn = UIAssets.create_wood_button(
 		"res://UI/05_modals/btn_ending_blue_wood.png",
-		"LANJUT DAY 2  ➔", 16, Color.WHITE, "", "black", 5
+		"LANJUT DAY 2  ➔", 16, Color(0.20, 0.12, 0.05), "", "black", 5
 	)
 	_night_next_btn.position = Vector2(334, 616)
 	_night_next_btn.pressed.connect(Callable(self, "advance_to_next_day"))
@@ -941,7 +941,7 @@ func _setup_ui() -> void:
 	# Optional Pay Shortfall Button inside paper footer
 	_night_pay_btn = UIAssets.create_wood_button(
 		"res://UI/05_modals/btn_ending_blue_wood.png",
-		"BAYAR DEFISIT & LANJUT", 14, Color.WHITE, "", "black", 5
+		"BAYAR DEFISIT & LANJUT", 14, Color(0.20, 0.12, 0.05), "", "black", 5
 	)
 	_night_pay_btn.position = Vector2(134, 396)
 	_night_pay_btn.visible = false

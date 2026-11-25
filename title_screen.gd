@@ -129,11 +129,11 @@ func _build_ui() -> void:
 
 	# 3. Main Menu Wood Plank Buttons (Positioned cleanly below logo & above y=676 footer)
 	var start_btn := UIAssets.create_wood_button(
-		"res://UI/04_title/title_btn_primary_normal.png",
+		"res://UI/04_title/title_btn_primary_hover.png",
 		"START SHIFT  ➔",
 		19,
-		Color(0.98, 0.99, 1.0),
-		"res://UI/04_title/title_btn_primary_hover.png",
+		Color(0.20, 0.12, 0.05),
+		"",
 		"black",
 		5
 	)

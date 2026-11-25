@@ -326,6 +326,7 @@ func _create_streak_panel() -> Control:
 
 # ===========================================================================
 # 4. Bottom-Left: Pack Caddy Inventory Slots (#1 - #4) (307 x 127)
+#    Exact baked cutouts in hud_pack_caddy_bg.png: x=[19,87,155,223], y=19, w=57, h=85
 # ===========================================================================
 
 func _create_inventory_panel() -> Control:
@@ -343,22 +344,13 @@ func _create_inventory_panel() -> Control:
 	caddy_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	container.add_child(caddy_tex)
 
-	# 4 slots * 66 + 3 * 6 = 282px -> centered horizontally at x = 13, y = 17
-	var hbox := HBoxContainer.new()
-	hbox.name = "HBoxContainer"
-	hbox.position = Vector2(13, 17)
-	hbox.custom_minimum_size = Vector2(282, 94)
-	hbox.size = Vector2(282, 94)
-	hbox.add_theme_constant_override("separation", 6)
-	container.add_child(hbox)
-
 	_inventory_slots.clear()
+	var slot_xs := [19.0, 87.0, 155.0, 223.0]
 	for i in range(4):
 		var slot := InventorySlotWidget.new()
 		slot.slot_number = i + 1
-		slot.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		slot.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		hbox.add_child(slot)
+		slot.position = Vector2(slot_xs[i], 19.0)
+		container.add_child(slot)
 		_inventory_slots.append(slot)
 
 	return container
@@ -366,6 +358,7 @@ func _create_inventory_panel() -> Control:
 
 # ===========================================================================
 # 5. Bottom-Right: Active Gear / Perks Rail (322 x 127)
+#    Exact baked cutouts in hud_equipped_rail_bg.png: x=[17,77,137,197,257], y=19, w=49, h=85
 # ===========================================================================
 
 func _create_perks_panel() -> Control:
@@ -383,21 +376,13 @@ func _create_perks_panel() -> Control:
 	rail_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	container.add_child(rail_tex)
 
-	# 5 slots * 58 + 4 * 3 = 302px -> centered horizontally at x = 10, y = 17
-	var hbox := HBoxContainer.new()
-	hbox.position = Vector2(10, 17)
-	hbox.custom_minimum_size = Vector2(302, 94)
-	hbox.size = Vector2(302, 94)
-	hbox.add_theme_constant_override("separation", 3)
-	container.add_child(hbox)
-
 	_perk_slot_widgets.clear()
-	for _i in range(5):
+	var perk_xs := [17.0, 77.0, 137.0, 197.0, 257.0]
+	for i in range(5):
 		var slot_empty := PerkSlotWidget.new()
+		slot_empty.position = Vector2(perk_xs[i], 19.0)
 		slot_empty.set_empty()
-		slot_empty.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-		slot_empty.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		hbox.add_child(slot_empty)
+		container.add_child(slot_empty)
 		_perk_slot_widgets.append(slot_empty)
 
 	return container
@@ -774,7 +759,7 @@ class OdometerWidget extends Control:
 			_digit_labels[i].add_theme_color_override("font_color", col)
 
 
-## Bottom-Left Inventory Slot (#1 - #4) with HD empty/filled textures (66 x 94)
+## Bottom-Left Inventory Slot (#1 - #4) snapped cleanly inside hud_pack_caddy_bg.png cutout (57 x 85)
 class InventorySlotWidget extends Control:
 	enum ItemType { EMPTY, METAL, GLASS, PLASTIC, OTHER }
 
@@ -782,104 +767,110 @@ class InventorySlotWidget extends Control:
 	var item_type: ItemType = ItemType.EMPTY
 	var item_name: String = "EMPTY"
 
-	var _bg_rect: TextureRect = null
+	var _fill_panel: Panel = null
 	var _icon_label: Label = null
-	var _num_label: Label = null
 	var _item_label: Label = null
 
 	func _ready() -> void:
-		custom_minimum_size = Vector2(66, 94)
-		size = Vector2(66, 94)
+		custom_minimum_size = Vector2(57, 85)
+		size = Vector2(57, 85)
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-		_bg_rect = UIAssets.create_texture_rect("res://UI/01_hud/hud_pack_slot_empty.png")
-		_bg_rect.position = Vector2.ZERO
-		_bg_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(_bg_rect)
-
-		_num_label = UIAssets.create_label(
-			"#%d" % slot_number, 9, Color(0.48, 0.54, 0.62, 1.0), "mono",
-			HORIZONTAL_ALIGNMENT_RIGHT, VERTICAL_ALIGNMENT_CENTER
-		)
-		_num_label.position = Vector2(4, 4)
-		_num_label.size = Vector2(56, 14)
-		add_child(_num_label)
+		_fill_panel = Panel.new()
+		_fill_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_fill_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_fill_panel.visible = false
+		add_child(_fill_panel)
 
 		_icon_label = Label.new()
 		_icon_label.text = ""
-		_icon_label.position = Vector2(0, 18)
-		_icon_label.size = Vector2(66, 48)
+		_icon_label.position = Vector2(0, 16)
+		_icon_label.size = Vector2(57, 44)
 		_icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_icon_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		_icon_label.add_theme_font_size_override("font_size", 26)
+		_icon_label.add_theme_font_size_override("font_size", 24)
 		_icon_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(_icon_label)
 
 		_item_label = UIAssets.create_label(
-			"EMPTY", 9, Color(0.36, 0.41, 0.48, 1.0), "black",
+			"EMPTY", 8, Color(0.42, 0.46, 0.52, 0.85), "bold",
 			HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 		)
-		_item_label.position = Vector2(0, 72)
-		_item_label.size = Vector2(66, 16)
+		_item_label.position = Vector2(0, 65)
+		_item_label.size = Vector2(57, 16)
 		add_child(_item_label)
 
 	func set_item(type: ItemType, label_text: String) -> void:
 		item_type = type
 		item_name = label_text
-		if is_instance_valid(_bg_rect):
-			_bg_rect.texture = UIAssets.get_tex("res://UI/01_hud/hud_pack_slot_filled.png")
+		var tint := Color(0.26, 0.21, 0.12, 0.92)
+		var accent := Color(0.96, 0.68, 0.20, 1.0)
+		var icon_txt := "📦"
+		match type:
+			ItemType.METAL:
+				tint = Color(0.24, 0.18, 0.10, 0.92)
+				accent = Color(0.98, 0.72, 0.24)
+				icon_txt = "🥫"
+			ItemType.GLASS:
+				tint = Color(0.11, 0.22, 0.15, 0.92)
+				accent = Color(0.42, 0.92, 0.56)
+				icon_txt = "🍾"
+			ItemType.PLASTIC:
+				tint = Color(0.11, 0.19, 0.26, 0.92)
+				accent = Color(0.50, 0.80, 0.98)
+				icon_txt = "🧴"
+		if is_instance_valid(_fill_panel):
+			var sb := StyleBoxFlat.new()
+			sb.bg_color = tint
+			sb.set_border_width_all(0)
+			sb.border_width_bottom = 3
+			sb.border_color = accent
+			sb.set_corner_radius_all(3)
+			_fill_panel.add_theme_stylebox_override("panel", sb)
+			_fill_panel.visible = true
+		if is_instance_valid(_icon_label):
+			_icon_label.text = icon_txt
 		if is_instance_valid(_item_label):
 			_item_label.text = label_text
-			match type:
-				ItemType.METAL:
-					_item_label.add_theme_color_override("font_color", Color(0.96, 0.62, 0.12))
-					if is_instance_valid(_icon_label): _icon_label.text = "🥫"
-				ItemType.GLASS:
-					_item_label.add_theme_color_override("font_color", Color(0.24, 0.88, 0.44))
-					if is_instance_valid(_icon_label): _icon_label.text = "🍾"
-				ItemType.PLASTIC:
-					_item_label.add_theme_color_override("font_color", Color(0.28, 0.68, 0.96))
-					if is_instance_valid(_icon_label): _icon_label.text = "🧴"
-				_:
-					_item_label.add_theme_color_override("font_color", Color(0.92, 0.86, 0.72))
-					if is_instance_valid(_icon_label): _icon_label.text = "📦"
+			_item_label.add_theme_color_override("font_color", accent)
 
 	func set_empty() -> void:
 		item_type = ItemType.EMPTY
 		item_name = "EMPTY"
-		if is_instance_valid(_bg_rect):
-			_bg_rect.texture = UIAssets.get_tex("res://UI/01_hud/hud_pack_slot_empty.png")
+		if is_instance_valid(_fill_panel):
+			_fill_panel.visible = false
 		if is_instance_valid(_icon_label):
 			_icon_label.text = ""
 		if is_instance_valid(_item_label):
 			_item_label.text = "EMPTY"
-			_item_label.add_theme_color_override("font_color", Color(0.36, 0.41, 0.48, 1.0))
+			_item_label.add_theme_color_override("font_color", Color(0.42, 0.46, 0.52, 0.85))
 
 
-## Bottom-Right Active Gear / Perk Slot with HD gadget slot rarity textures (58 x 94)
+## Bottom-Right Active Gear / Perk Slot snapped cleanly inside hud_equipped_rail_bg.png cutout (49 x 85)
 class PerkSlotWidget extends Control:
 	var perk_id: String = ""
 	var perk_title: String = "EMPTY"
 	var rarity: String = "COMMON"
 
-	var _bg_rect: TextureRect = null
+	var _fill_panel: Panel = null
 	var _art_rect: TextureRect = null
 	var _icon_label: Label = null
 	var _title_label: Label = null
 
 	func _ready() -> void:
-		custom_minimum_size = Vector2(58, 94)
-		size = Vector2(58, 94)
+		custom_minimum_size = Vector2(49, 85)
+		size = Vector2(49, 85)
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-		_bg_rect = UIAssets.create_texture_rect("res://UI/01_hud/hud_gadget_slot_common.png")
-		_bg_rect.position = Vector2.ZERO
-		_bg_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(_bg_rect)
+		_fill_panel = Panel.new()
+		_fill_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
+		_fill_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_fill_panel.visible = false
+		add_child(_fill_panel)
 
 		_art_rect = TextureRect.new()
-		_art_rect.position = Vector2(7, 18)
-		_art_rect.size = Vector2(44, 44)
+		_art_rect.position = Vector2(5, 14)
+		_art_rect.size = Vector2(39, 39)
 		_art_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		_art_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		_art_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -888,20 +879,20 @@ class PerkSlotWidget extends Control:
 
 		_icon_label = Label.new()
 		_icon_label.text = ""
-		_icon_label.position = Vector2(0, 16)
-		_icon_label.size = Vector2(58, 48)
+		_icon_label.position = Vector2(0, 12)
+		_icon_label.size = Vector2(49, 46)
 		_icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_icon_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		_icon_label.add_theme_font_size_override("font_size", 26)
+		_icon_label.add_theme_font_size_override("font_size", 24)
 		_icon_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(_icon_label)
 
 		_title_label = UIAssets.create_label(
-			perk_title, 8, Color(0.40, 0.45, 0.52, 1.0), "black",
+			perk_title, 8, Color(0.42, 0.46, 0.52, 0.85), "bold",
 			HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
 		)
-		_title_label.position = Vector2(0, 72)
-		_title_label.size = Vector2(58, 16)
+		_title_label.position = Vector2(0, 65)
+		_title_label.size = Vector2(49, 16)
 		add_child(_title_label)
 
 		_update_visuals()
@@ -919,24 +910,11 @@ class PerkSlotWidget extends Control:
 		_update_visuals()
 
 	func _update_visuals() -> void:
-		if not is_instance_valid(_bg_rect):
+		if not is_instance_valid(_fill_panel):
 			return
 
-		var tex_path := "res://UI/01_hud/hud_gadget_slot_common.png"
-		match rarity.to_upper():
-			"UNCOMMON":
-				tex_path = "res://UI/01_hud/hud_gadget_slot_uncommon.png"
-			"RARE":
-				tex_path = "res://UI/01_hud/hud_gadget_slot_rare.png"
-			"LEGENDARY":
-				tex_path = "res://UI/01_hud/hud_gadget_slot_legendary.png"
-			_:
-				tex_path = "res://UI/01_hud/hud_gadget_slot_common.png"
-
-		_bg_rect.texture = UIAssets.get_tex(tex_path)
-
 		if perk_id == "":
-			_bg_rect.modulate = Color(0.50, 0.52, 0.56, 0.62)
+			_fill_panel.visible = false
 			if is_instance_valid(_art_rect):
 				_art_rect.visible = false
 			if is_instance_valid(_icon_label):
@@ -944,9 +922,30 @@ class PerkSlotWidget extends Control:
 				_icon_label.visible = true
 			if is_instance_valid(_title_label):
 				_title_label.text = "EMPTY"
-				_title_label.add_theme_color_override("font_color", Color(0.36, 0.40, 0.46))
+				_title_label.add_theme_color_override("font_color", Color(0.42, 0.46, 0.52, 0.85))
 		else:
-			_bg_rect.modulate = Color.WHITE
+			var bg_col := Color(0.14, 0.22, 0.16, 0.94)
+			var bar_col := Color(0.36, 0.80, 0.46, 1.0)
+			match rarity.to_upper():
+				"UNCOMMON":
+					bg_col = Color(0.14, 0.21, 0.28, 0.94)
+					bar_col = Color(0.42, 0.76, 0.96, 1.0)
+				"RARE":
+					bg_col = Color(0.22, 0.15, 0.28, 0.94)
+					bar_col = Color(0.76, 0.52, 0.98, 1.0)
+				"LEGENDARY":
+					bg_col = Color(0.28, 0.20, 0.10, 0.94)
+					bar_col = Color(0.98, 0.78, 0.26, 1.0)
+
+			var sb := StyleBoxFlat.new()
+			sb.bg_color = bg_col
+			sb.set_border_width_all(0)
+			sb.border_width_bottom = 3
+			sb.border_color = bar_col
+			sb.set_corner_radius_all(3)
+			_fill_panel.add_theme_stylebox_override("panel", sb)
+			_fill_panel.visible = true
+
 			var custom_art := UIAssets.get_card_art(perk_id)
 			if custom_art != null and is_instance_valid(_art_rect):
 				_art_rect.texture = custom_art
@@ -975,4 +974,4 @@ class PerkSlotWidget extends Control:
 					_icon_label.visible = true
 			if is_instance_valid(_title_label):
 				_title_label.text = perk_title
-				_title_label.add_theme_color_override("font_color", Color(0.94, 0.91, 0.82))
+				_title_label.add_theme_color_override("font_color", Color(0.96, 0.94, 0.88))

@@ -319,7 +319,7 @@ func _build_ui() -> void:
 	_content.add_child(_mod_shop_btn)
 
 	var hint_lbl := UIAssets.create_label(
-		"Tekan [1-3] pilih mesin, lalu [C] untuk pasang di dunia",
+		"Tekan [1-6] pilih mesin/perangkap, lalu [C] untuk pasang di dunia",
 		12, Color(0.88, 0.83, 0.74, 0.82), "semibold",
 		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER, 0.5
 	)
@@ -331,7 +331,7 @@ func _build_ui() -> void:
 		"res://UI/02_shop/btn_start_blue_wood.png",
 		"START DAY  ➔",
 		16,
-		Color.WHITE,
+		Color(0.20, 0.12, 0.05),
 		"",
 		"black",
 		5
