@@ -1,37 +1,37 @@
 # game_hud.gd
-# Implements the custom industrial/retro-utility HUD using raw HD UI textures in res://UI/01_hud/
-# - Top-Left: Haul Quota with hud_quota_bg and hud_quota_fill TextureProgressBar
-# - Top-Center: Time Until Sunset with hud_timer_bg bronze plaque and End Day button
-# - Top-Right: 4-digit mechanical Streak Counter with hud_streak_clicker_bg
-# - Bottom-Left: Inventory quick-slots with hud_pack_caddy_bg, hud_pack_slot_empty/filled
-# - Bottom-Right: 5 Gear/Perk slots with hud_equipped_rail_bg and hud_gadget_slot_*
+# Industrial / Retro-Utility In-Game HUD using raw HD textures in res://UI/01_hud/
+# Preserves 100% of Fahri's Event HUD Panel & EventSystem hooks while delivering
+# pixel-accurate odometer alignment, crisp bundled typography, two-tone Haul Quota,
+# live owned_perks sync, and clean bottom bar spacing alongside the Machine Hotbar.
 
 class_name GameHUD
 extends CanvasLayer
 
 const UIAssets = preload("res://ui_assets.gd")
 
-# ---------------------------------------------------------------------------
-# Colors
-# ---------------------------------------------------------------------------
-const COL_AMBER := Color(0.96, 0.62, 0.12, 1.0)
-const COL_AMBER_DARK := Color(0.82, 0.44, 0.10, 1.0)
-const COL_TEXT_LIGHT := Color(0.88, 0.90, 0.94, 1.0)
-const COL_TEXT_DIM := Color(0.42, 0.46, 0.54, 1.0)
+const COL_AMBER      := Color(0.96, 0.68, 0.16, 1.0)
+const COL_AMBER_DARK := Color(0.74, 0.44, 0.12, 1.0)
+const COL_GREEN      := Color(0.32, 0.90, 0.48, 1.0)
+const COL_TEXT_LIGHT := Color(0.90, 0.92, 0.96, 1.0)
+const COL_TEXT_DIM   := Color(0.45, 0.50, 0.58, 1.0)
 
 # References
-var quota_val_label: Label = null
+var quota_val_label: RichTextLabel = null
 var quota_progress_bar: TextureProgressBar = null
 var time_label: Label = null
 var time_sub_label: Label = null
 var end_day_btn: Button = null
+var _end_day_sb_normal: StyleBoxFlat = null
+var _end_day_sb_hover: StyleBoxFlat = null
 var streak_counter: Control = null
 var mult_label: Label = null
 var inventory_panel: Control = null
 var perks_panel: Control = null
 var _inventory_slots: Array = []
 var _perk_slot_widgets: Array = []
+var _last_owned_perks_sig: String = ""
 
+# Event HUD Panel (Fahri's EventSystem integration)
 var event_panel: PanelContainer = null
 var event_title_label: Label = null
 var event_sub_label: Label = null
@@ -40,13 +40,11 @@ var event_hp_bar: ProgressBar = null
 # Live values
 var current_quota_val: float = 0.0
 var max_quota_val: float = 100.0
-var quota_unit: String = "KG"
+var quota_unit: String = "SC"
 var current_streak: int = 0
 var current_mult: float = 1.0
 
-# ---------------------------------------------------------------------------
-# Initialization & Setup
-# ---------------------------------------------------------------------------
+
 func _ready() -> void:
 	layer = 10
 	add_to_group("game_hud")
@@ -55,11 +53,14 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
+	var player := get_tree().get_first_node_in_group("player")
+	if player:
+		_sync_perks_if_changed(player)
+
 	var dnc := get_tree().get_first_node_in_group("day_night_cycle")
 	if not dnc:
 		return
 
-	# Ensure system signals are connected if DNC spawned after GameHUD
 	if dnc.has_signal("time_updated") and not dnc.time_updated.is_connected(_on_dnc_time_updated):
 		dnc.time_updated.connect(_on_dnc_time_updated)
 	if dnc.has_signal("day_started") and not dnc.day_started.is_connected(_on_dnc_day_started):
@@ -67,7 +68,6 @@ func _process(_delta: float) -> void:
 	if dnc.has_signal("night_started") and not dnc.night_started.is_connected(_on_dnc_night_started):
 		dnc.night_started.connect(_on_dnc_night_started)
 
-	# Keep haul quota in sync in real-time
 	var cur: float = 0.0
 	var tgt: float = 100.0
 	var quota_passed: bool = false
@@ -75,12 +75,11 @@ func _process(_delta: float) -> void:
 		cur = float(dnc.get_daily_progress_amount())
 		tgt = float(dnc.get_current_quota())
 		quota_passed = (cur >= tgt)
-		var unit: String = "KG"
+		var unit: String = "SC"
 		if "quota_type" in dnc:
 			unit = "KG" if dnc.quota_type == DayNightCycle.QuotaType.ITEM_COUNT else "SC"
 		update_quota(cur, tgt, unit)
 
-	# Update countdown timer on top of the screen in real-time
 	if "day_duration_seconds" in dnc and "day_elapsed_seconds" in dnc:
 		if not dnc.is_night:
 			var remaining_seconds: float = maxf(0.0, float(dnc.day_duration_seconds) - float(dnc.day_elapsed_seconds))
@@ -91,16 +90,19 @@ func _process(_delta: float) -> void:
 		else:
 			update_time_display("00:00", true, quota_passed)
 
-	# Update End Day button state
 	if is_instance_valid(end_day_btn):
 		var is_waiting: bool = bool(dnc.get("is_waiting_for_day_start")) if "is_waiting_for_day_start" in dnc else false
 		end_day_btn.visible = (not dnc.is_night) and (not is_waiting)
 		if quota_passed:
-			end_day_btn.text = "🌅 END DAY [N] (QUOTA MET)"
-			end_day_btn.modulate = Color(0.4, 1.0, 0.6)
+			end_day_btn.text = "✓  HOLD [N] END DAY • MET"
+			end_day_btn.add_theme_color_override("font_color", COL_GREEN)
+			if _end_day_sb_normal:
+				_end_day_sb_normal.border_color = COL_GREEN
 		else:
-			end_day_btn.text = "🌅 END DAY [N]"
-			end_day_btn.modulate = Color(1.0, 0.85, 0.4)
+			end_day_btn.text = "HOLD [N]  END DAY"
+			end_day_btn.add_theme_color_override("font_color", COL_AMBER)
+			if _end_day_sb_normal:
+				_end_day_sb_normal.border_color = COL_AMBER_DARK
 
 	# Sync EventSystem state if active
 	if dnc and "event_system" in dnc and dnc.event_system:
@@ -120,26 +122,26 @@ func _build_hud_layout() -> void:
 	# 1. Top-Left: Haul Quota Panel (264 x 64)
 	root.add_child(_create_haul_quota_panel())
 
-	# 2. Top-Center: Time Banner (298 x 72) & End Day Button
+	# 2. Top-Center: Sunset Timer Plaque, Sleek End Day Tag, & Event HUD Panel
 	root.add_child(_create_time_banner())
-
 	end_day_btn = _create_end_day_button()
 	root.add_child(end_day_btn)
-
-	# 2b. Top-Center Special Event Banner
 	event_panel = _create_event_panel()
 	root.add_child(event_panel)
 
-	# 3. Top-Right: Streak Counter Panel (167 x 171)
+	# 3. Top-Right: Mechanical Streak Counter (167 x 171)
 	root.add_child(_create_streak_panel())
 
-	# 4. Bottom-Left: Inventory Slots (307 x 127)
+	# 4. Bottom-Left: Pack Caddy Slots (#1 - #4) (307 x 127)
 	inventory_panel = _create_inventory_panel()
 	root.add_child(inventory_panel)
 
-	# 5. Bottom-Right: Active Gear / Perks Panel (322 x 127)
+	# 5. Bottom-Right: Equipped Gear / Perk Rail (5 slots) (322 x 127)
 	perks_panel = _create_perks_panel()
 	root.add_child(perks_panel)
+
+	# 6. Bottom-Center: Subtle Keybind Strip (sits cleanly beneath Machine Hotbar)
+	root.add_child(_create_keybind_hint_bar())
 
 
 func _connect_to_systems() -> void:
@@ -149,18 +151,19 @@ func _connect_to_systems() -> void:
 func _deferred_connect() -> void:
 	var player := get_tree().get_first_node_in_group("player")
 	if player:
-		if player.has_signal("item_bagged"):
-			player.item_bagged.connect(Callable(self, "_on_player_item_bagged"))
+		if player.has_signal("item_bagged") and not player.item_bagged.is_connected(_on_player_item_bagged):
+			player.item_bagged.connect(_on_player_item_bagged)
 		_refresh_inventory_from_player(player)
+		sync_perks_from_player(player)
 
 	var dnc := get_tree().get_first_node_in_group("day_night_cycle")
 	if dnc:
-		if dnc.has_signal("time_updated"):
-			dnc.time_updated.connect(Callable(self, "_on_dnc_time_updated"))
-		if dnc.has_signal("day_started"):
-			dnc.day_started.connect(Callable(self, "_on_dnc_day_started"))
-		if dnc.has_signal("night_started"):
-			dnc.night_started.connect(Callable(self, "_on_dnc_night_started"))
+		if dnc.has_signal("time_updated") and not dnc.time_updated.is_connected(_on_dnc_time_updated):
+			dnc.time_updated.connect(_on_dnc_time_updated)
+		if dnc.has_signal("day_started") and not dnc.day_started.is_connected(_on_dnc_day_started):
+			dnc.day_started.connect(_on_dnc_day_started)
+		if dnc.has_signal("night_started") and not dnc.night_started.is_connected(_on_dnc_night_started):
+			dnc.night_started.connect(_on_dnc_night_started)
 		if "event_system" in dnc and dnc.event_system:
 			_connect_event_system(dnc.event_system)
 
@@ -168,30 +171,33 @@ func _deferred_connect() -> void:
 # ===========================================================================
 # 1. Top-Left: Haul Quota Panel (264 x 64)
 # ===========================================================================
+
 func _create_haul_quota_panel() -> Control:
 	var container := Control.new()
-	container.position = Vector2(24, 20)
+	container.position = Vector2(22, 18)
 	container.custom_minimum_size = Vector2(264, 64)
 	container.size = Vector2(264, 64)
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	# HD Panel Texture
 	var bg_tex := UIAssets.create_texture_rect("res://UI/01_hud/hud_quota_bg.png")
+	bg_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	container.add_child(bg_tex)
 
-	# "000 / 100 KG" label (Positioned on the right of the baked "HAUL QUOTA" title)
-	quota_val_label = Label.new()
-	quota_val_label.text = "000 / 100 KG"
-	quota_val_label.position = Vector2(110, 10)
-	quota_val_label.size = Vector2(134, 20)
-	quota_val_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	quota_val_label.add_theme_color_override("font_color", COL_TEXT_LIGHT)
-	quota_val_label.add_theme_font_size_override("font_size", 12)
+	quota_val_label = RichTextLabel.new()
+	quota_val_label.bbcode_enabled = true
+	quota_val_label.scroll_active = false
+	quota_val_label.fit_content = false
+	quota_val_label.position = Vector2(108, 10)
+	quota_val_label.size = Vector2(134, 22)
+	quota_val_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	quota_val_label.add_theme_font_override("normal_font", UIAssets.get_font("mono"))
+	quota_val_label.add_theme_font_override("bold_font", UIAssets.get_font("black"))
+	quota_val_label.add_theme_font_size_override("normal_font_size", 11)
+	quota_val_label.add_theme_font_size_override("bold_font_size", 12)
 	container.add_child(quota_val_label)
 
-	# Hazard Striped Progress Bar using hud_quota_fill.png (219 x 16)
 	quota_progress_bar = TextureProgressBar.new()
-	quota_progress_bar.position = Vector2(22, 36)
+	quota_progress_bar.position = Vector2(22, 37)
 	quota_progress_bar.custom_minimum_size = Vector2(219, 16)
 	quota_progress_bar.size = Vector2(219, 16)
 	quota_progress_bar.nine_patch_stretch = false
@@ -203,46 +209,40 @@ func _create_haul_quota_panel() -> Control:
 	quota_progress_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	container.add_child(quota_progress_bar)
 
+	update_quota(0.0, max_quota_val, quota_unit)
 	return container
 
 
 # ===========================================================================
-# 2. Top-Center: Time Until Sunset Banner & End Day Button (298 x 72)
+# 2. Top-Center: Sunset Timer Banner & Sleek End Day Tag (298 x 72)
 # ===========================================================================
+
 func _create_time_banner() -> Control:
 	var container := Control.new()
 	container.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	container.offset_left = -149
 	container.offset_right = 149
-	container.offset_top = 10
-	container.offset_bottom = 82
+	container.offset_top = 12
+	container.offset_bottom = 84
 	container.custom_minimum_size = Vector2(298, 72)
 	container.size = Vector2(298, 72)
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	# HD Bronze Plaque Texture
 	var plaque_tex := UIAssets.create_texture_rect("res://UI/01_hud/hud_timer_bg.png")
+	plaque_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	container.add_child(plaque_tex)
 
-	# Big Bold Time Display
-	time_label = Label.new()
-	time_label.text = "02:15"
-	time_label.position = Vector2(0, 12)
-	time_label.size = Vector2(298, 30)
-	time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	time_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	time_label.add_theme_color_override("font_color", Color(0.18, 0.14, 0.10, 1.0))
-	time_label.add_theme_font_size_override("font_size", 24)
+	time_label = UIAssets.create_label(
+		"☀ 07:00", 26, Color(0.14, 0.11, 0.08, 1.0), "black",
+		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
+	)
+	time_label.position = Vector2(0, 10)
+	time_label.size = Vector2(298, 34)
 	container.add_child(time_label)
 
-	# Subtitle (Only shown during NIGHTFALL or when QUOTA MET so baked UNTIL SUNSET is untouched)
+	# Legacy hidden node reference so baked "UNTIL SUNSET" texture is never overwritten
 	time_sub_label = Label.new()
-	time_sub_label.text = ""
-	time_sub_label.position = Vector2(0, 44)
-	time_sub_label.size = Vector2(298, 16)
-	time_sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	time_sub_label.add_theme_color_override("font_color", Color(0.36, 0.26, 0.16, 1.0))
-	time_sub_label.add_theme_font_size_override("font_size", 10)
+	time_sub_label.visible = false
 	container.add_child(time_sub_label)
 
 	return container
@@ -250,30 +250,33 @@ func _create_time_banner() -> Control:
 
 func _create_end_day_button() -> Button:
 	var btn := Button.new()
-	btn.text = "🌅 END DAY [N]"
-	btn.add_theme_font_override("font", ThemeDB.fallback_font)
-	btn.add_theme_font_size_override("font_size", 11)
+	btn.text = "HOLD [N]  END DAY"
+	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	btn.add_theme_font_override("font", UIAssets.get_font("mono"))
+	btn.add_theme_font_size_override("font_size", 10)
 	btn.add_theme_color_override("font_color", COL_AMBER)
 	btn.add_theme_color_override("font_hover_color", Color.WHITE)
 	btn.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	btn.offset_left = -80
-	btn.offset_right = 80
-	btn.offset_top = 88
-	btn.offset_bottom = 112
-	btn.custom_minimum_size = Vector2(160, 24)
-	btn.size = Vector2(160, 24)
+	btn.offset_left = -104
+	btn.offset_right = 104
+	btn.offset_top = 86
+	btn.offset_bottom = 108
+	btn.custom_minimum_size = Vector2(208, 22)
+	btn.size = Vector2(208, 22)
 
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.10, 0.12, 0.16, 0.92)
-	sb.border_color = COL_AMBER_DARK
-	sb.set_border_width_all(1)
-	sb.set_corner_radius_all(4)
-	btn.add_theme_stylebox_override("normal", sb)
+	_end_day_sb_normal = StyleBoxFlat.new()
+	_end_day_sb_normal.bg_color = Color(0.09, 0.11, 0.14, 0.88)
+	_end_day_sb_normal.border_color = COL_AMBER_DARK
+	_end_day_sb_normal.set_border_width_all(1)
+	_end_day_sb_normal.set_corner_radius_all(3)
+	btn.add_theme_stylebox_override("normal", _end_day_sb_normal)
 
-	var sb_hov: StyleBoxFlat = sb.duplicate()
-	sb_hov.bg_color = Color(0.20, 0.24, 0.32, 0.98)
-	sb_hov.border_color = COL_AMBER
-	btn.add_theme_stylebox_override("hover", sb_hov)
+	_end_day_sb_hover = _end_day_sb_normal.duplicate()
+	_end_day_sb_hover.bg_color = Color(0.16, 0.19, 0.24, 0.96)
+	_end_day_sb_hover.border_color = COL_AMBER
+	btn.add_theme_stylebox_override("hover", _end_day_sb_hover)
+	btn.add_theme_stylebox_override("pressed", _end_day_sb_hover)
+	btn.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
 
 	btn.pressed.connect(_on_end_day_btn_pressed)
 	return btn
@@ -286,68 +289,66 @@ func _on_end_day_btn_pressed() -> void:
 
 
 # ===========================================================================
-# 3. Top-Right: Streak Counter & Multiplier Panel (167 x 171)
+# 3. Top-Right: Mechanical Streak Counter & Multiplier (167 x 171)
 # ===========================================================================
+
 func _create_streak_panel() -> Control:
 	var container := Control.new()
 	container.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	container.offset_left = -187
-	container.offset_right = -20
+	container.offset_left = -189
+	container.offset_right = -22
 	container.offset_top = 14
 	container.offset_bottom = 185
 	container.custom_minimum_size = Vector2(167, 171)
 	container.size = Vector2(167, 171)
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	# HD Streak Clicker Background Texture
 	var streak_tex := UIAssets.create_texture_rect("res://UI/01_hud/hud_streak_clicker_bg.png")
+	streak_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	container.add_child(streak_tex)
 
-	# 4-Digit Odometer Display positioned precisely inside baked cutout slots (x:23, y:43, w:121, h:39)
 	streak_counter = OdometerWidget.new()
-	streak_counter.position = Vector2(23, 43)
-	streak_counter.custom_minimum_size = Vector2(121, 39)
-	streak_counter.size = Vector2(121, 39)
+	streak_counter.position = Vector2.ZERO
+	streak_counter.size = Vector2(167, 171)
 	container.add_child(streak_counter)
 
-	# Multiplier Badge positioned precisely inside baked bottom amber box (x:22, y:114, w:122, h:33)
-	mult_label = Label.new()
-	mult_label.text = "MULT: ×1.0"
+	mult_label = UIAssets.create_label(
+		"MULT: ×1.0", 14, Color(0.14, 0.10, 0.05, 1.0), "black",
+		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
+	)
 	mult_label.position = Vector2(22, 114)
-	mult_label.size = Vector2(122, 33)
-	mult_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	mult_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	mult_label.add_theme_color_override("font_color", Color(0.14, 0.10, 0.05, 1.0))
-	mult_label.add_theme_font_size_override("font_size", 15)
+	mult_label.size = Vector2(123, 34)
 	container.add_child(mult_label)
 
 	return container
 
 
 # ===========================================================================
-# 4. Bottom-Left: Inventory Slots (#1 - #4) (307 x 127)
+# 4. Bottom-Left: Pack Caddy Inventory Slots (#1 - #4) (307 x 127)
 # ===========================================================================
+
 func _create_inventory_panel() -> Control:
 	var container := Control.new()
 	container.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	container.offset_left = 24
-	container.offset_right = 331
+	container.offset_left = 22
+	container.offset_right = 329
 	container.offset_top = -147
 	container.offset_bottom = -20
 	container.custom_minimum_size = Vector2(307, 127)
 	container.size = Vector2(307, 127)
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	# HD Pack Caddy Background Texture
 	var caddy_tex := UIAssets.create_texture_rect("res://UI/01_hud/hud_pack_caddy_bg.png")
+	caddy_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	container.add_child(caddy_tex)
 
+	# 4 slots * 66 + 3 * 6 = 282px -> centered horizontally at x = 13, y = 17
 	var hbox := HBoxContainer.new()
 	hbox.name = "HBoxContainer"
-	hbox.position = Vector2(16, 16)
-	hbox.custom_minimum_size = Vector2(276, 94)
-	hbox.size = Vector2(276, 94)
-	hbox.add_theme_constant_override("separation", 4)
+	hbox.position = Vector2(13, 17)
+	hbox.custom_minimum_size = Vector2(282, 94)
+	hbox.size = Vector2(282, 94)
+	hbox.add_theme_constant_override("separation", 6)
 	container.add_child(hbox)
 
 	_inventory_slots.clear()
@@ -363,50 +364,34 @@ func _create_inventory_panel() -> Control:
 
 
 # ===========================================================================
-# 5. Bottom-Right: Active Gear / Perks Panel (322 x 127)
+# 5. Bottom-Right: Active Gear / Perks Rail (322 x 127)
 # ===========================================================================
+
 func _create_perks_panel() -> Control:
 	var container := Control.new()
 	container.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	container.offset_left = -342
-	container.offset_right = -20
+	container.offset_left = -344
+	container.offset_right = -22
 	container.offset_top = -147
 	container.offset_bottom = -20
 	container.custom_minimum_size = Vector2(322, 127)
 	container.size = Vector2(322, 127)
 	container.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	# HD Equipped Rail Background Texture
 	var rail_tex := UIAssets.create_texture_rect("res://UI/01_hud/hud_equipped_rail_bg.png")
+	rail_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	container.add_child(rail_tex)
 
+	# 5 slots * 58 + 4 * 3 = 302px -> centered horizontally at x = 10, y = 17
 	var hbox := HBoxContainer.new()
-	hbox.position = Vector2(16, 16)
-	hbox.custom_minimum_size = Vector2(290, 94)
-	hbox.size = Vector2(290, 94)
-	hbox.add_theme_constant_override("separation", 0)
+	hbox.position = Vector2(10, 17)
+	hbox.custom_minimum_size = Vector2(302, 94)
+	hbox.size = Vector2(302, 94)
+	hbox.add_theme_constant_override("separation", 3)
 	container.add_child(hbox)
 
 	_perk_slot_widgets.clear()
-
-	# Slot 0: Default Hi-Vis vest
-	var slot_hivis := PerkSlotWidget.new()
-	slot_hivis.set_perk("hivis_vest", "HI-VIS", "COMMON")
-	slot_hivis.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	slot_hivis.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	hbox.add_child(slot_hivis)
-	_perk_slot_widgets.append(slot_hivis)
-
-	# Slot 1: Default Piggy bank
-	var slot_piggy := PerkSlotWidget.new()
-	slot_piggy.set_perk("piggy_jar", "PIGGY", "UNCOMMON")
-	slot_piggy.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	slot_piggy.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	hbox.add_child(slot_piggy)
-	_perk_slot_widgets.append(slot_piggy)
-
-	# Slots 2, 3, 4: Empty slots
-	for i in range(3):
+	for _i in range(5):
 		var slot_empty := PerkSlotWidget.new()
 		slot_empty.set_empty()
 		slot_empty.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -418,200 +403,92 @@ func _create_perks_panel() -> Control:
 
 
 # ===========================================================================
-# Public API & Updates
+# 6. Bottom-Center: Subtle Keybind Strip (clear of Machine Hotbar)
 # ===========================================================================
 
-func update_quota(current: float, target: float, unit: String = "KG") -> void:
-	current_quota_val = current
-	max_quota_val = maxf(1.0, target)
-	quota_unit = unit
+func _create_keybind_hint_bar() -> Control:
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	panel.offset_left = -268
+	panel.offset_right = 268
+	panel.offset_top = -28
+	panel.offset_bottom = -6
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	if is_instance_valid(quota_val_label):
-		var cur_int := int(current)
-		var max_int := int(target)
-		quota_val_label.text = "%03d / %d %s" % [cur_int, max_int, unit]
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.06, 0.08, 0.11, 0.68)
+	sb.border_color = Color(0.45, 0.34, 0.22, 0.48)
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(4)
+	sb.content_margin_left = 12
+	sb.content_margin_right = 12
+	panel.add_theme_stylebox_override("panel", sb)
 
-	if is_instance_valid(quota_progress_bar):
-		var pct := clampf((current / max_quota_val) * 100.0, 0.0, 100.0)
-		quota_progress_bar.value = pct
-		if pct >= 100.0:
-			quota_progress_bar.modulate = Color(0.6, 1.2, 0.7)
-		else:
-			quota_progress_bar.modulate = Color(1.0, 1.0, 1.0)
-
-
-func equip_perk(slot_index: int, perk_id: String) -> void:
-	if slot_index < 0 or slot_index >= _perk_slot_widgets.size():
-		return
-
-	var slot: PerkSlotWidget = _perk_slot_widgets[slot_index]
-	match perk_id:
-		"hivis_vest":
-			slot.set_perk("hivis_vest", "HI-VIS", "COMMON")
-		"can_crusher":
-			slot.set_perk("can_crusher", "CRUSH", "COMMON")
-		"piggy_jar":
-			slot.set_perk("piggy_jar", "PIGGY", "UNCOMMON")
-		"speed_boots":
-			slot.set_perk("speed_boots", "BOOTS", "COMMON")
-		"magnet_glove":
-			slot.set_perk("magnet_glove", "MAGNET", "UNCOMMON")
-		"big_bag":
-			slot.set_perk("big_bag", "BIG BAG", "COMMON")
-		_:
-			slot.set_perk(perk_id, perk_id.to_upper(), "COMMON")
-
-
-func update_streak(count: int) -> void:
-	current_streak = count
-	current_mult = 1.0 + float(count) * 0.1
-
-	if is_instance_valid(streak_counter):
-		streak_counter.set_value(current_streak)
-
-	if is_instance_valid(mult_label):
-		mult_label.text = "MULT: ×%.1f" % current_mult
-
-
-func update_time_display(time_str: String, is_night: bool = false, is_quota_met: bool = false) -> void:
-	if is_instance_valid(time_label):
-		time_label.text = time_str
-	if is_instance_valid(time_sub_label):
-		if is_night:
-			time_sub_label.text = "NIGHTFALL"
-			time_sub_label.add_theme_color_override("font_color", Color(0.75, 0.25, 0.25))
-		elif is_quota_met:
-			time_sub_label.text = "QUOTA MET"
-			time_sub_label.add_theme_color_override("font_color", Color(0.15, 0.55, 0.25))
-		else:
-			# Baked "UNTIL SUNSET" texture is visible, keep empty so no text clashes
-			time_sub_label.text = ""
+	var lbl := UIAssets.create_label(
+		"[B] Mod Shop   •   [M] Mesin   •   [Q] Kontrak   •   [G] Granat   •   [ESC] Pause",
+		10, Color(0.88, 0.86, 0.80, 0.90), "mono",
+		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
+	)
+	panel.add_child(lbl)
+	return panel
 
 
 # ===========================================================================
-# System Signal Callbacks
+# Event HUD Panel & EventSystem Integration (100% Preserved + Styled)
 # ===========================================================================
 
-func _on_player_item_bagged(item_id: String, value: float, total_sc: float) -> void:
-	update_streak(current_streak + 1)
-
-	var player := get_tree().get_first_node_in_group("player")
-	if player:
-		_refresh_inventory_from_player(player)
-
-	var dnc := get_tree().get_first_node_in_group("day_night_cycle")
-	if dnc and dnc.has_method("get_daily_progress_amount"):
-		var cur := float(dnc.get_daily_progress_amount())
-		var tgt := float(dnc.get_current_quota())
-		update_quota(cur, tgt, "KG" if dnc.quota_type == DayNightCycle.QuotaType.ITEM_COUNT else "SC")
-
-
-func _on_dnc_time_updated(day_progress: float, hour: int, minute: int) -> void:
-	var dnc := get_tree().get_first_node_in_group("day_night_cycle")
-	if dnc:
-		var remaining_seconds: float = maxf(0.0, dnc.day_duration_seconds - dnc.day_elapsed_seconds)
-		var rem_min: int = int(remaining_seconds / 60.0)
-		var rem_sec: int = int(remaining_seconds) % 60
-		var time_str := "%02d:%02d" % [rem_min, rem_sec]
-		update_time_display(time_str, dnc.is_night)
-
-		var cur := float(dnc.get_daily_progress_amount())
-		var tgt := float(dnc.get_current_quota())
-		update_quota(cur, tgt, "KG" if dnc.quota_type == DayNightCycle.QuotaType.ITEM_COUNT else "SC")
-
-
-func _on_dnc_day_started(day_number: int) -> void:
-	update_streak(0)
-	var dnc := get_tree().get_first_node_in_group("day_night_cycle")
-	if dnc:
-		update_quota(0.0, dnc.get_current_quota(), "KG" if dnc.quota_type == DayNightCycle.QuotaType.ITEM_COUNT else "SC")
-
-
-func _on_dnc_night_started(day_number: int, quota_met: bool) -> void:
-	update_time_display("00:00", true)
-
-
-func _refresh_inventory_from_player(player: Node) -> void:
-	if _inventory_slots.is_empty():
-		return
-
-	var items: Array = []
-	if "trash_inventory_items" in player:
-		items = player.trash_inventory_items
-
-	for i in range(_inventory_slots.size()):
-		var slot_widget: InventorySlotWidget = _inventory_slots[i] as InventorySlotWidget
-		if not slot_widget:
-			continue
-		if i < items.size():
-			var item_data: Dictionary = items[items.size() - 1 - i]
-			var id_str: String = item_data.get("id", "trash").to_lower()
-			if id_str.contains("can") or id_str.contains("metal"):
-				slot_widget.set_item(InventorySlotWidget.ItemType.METAL, "METAL")
-			elif id_str.contains("bottle") or id_str.contains("glass"):
-				slot_widget.set_item(InventorySlotWidget.ItemType.GLASS, "GLASS")
-			elif id_str.contains("plastic"):
-				slot_widget.set_item(InventorySlotWidget.ItemType.PLASTIC, "PLASTIC")
-			else:
-				slot_widget.set_item(InventorySlotWidget.ItemType.OTHER, id_str.to_upper())
-		else:
-			slot_widget.set_empty()
-
-
-# ===========================================================================
-# Event HUD Panel & System Integration
-# ===========================================================================
 func _create_event_panel() -> PanelContainer:
 	event_panel = PanelContainer.new()
 	event_panel.name = "EventHUDPanel"
 	event_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	event_panel.offset_left = -190
-	event_panel.offset_right = 190
-	event_panel.offset_top = 118
-	event_panel.custom_minimum_size = Vector2(380, 52)
+	event_panel.offset_left = -204
+	event_panel.offset_right = 204
+	event_panel.offset_top = 120
+	event_panel.custom_minimum_size = Vector2(408, 54)
+	event_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	event_panel.visible = false
 
 	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.08, 0.08, 0.12, 0.90)
-	sb.border_color = Color(0.95, 0.35, 0.25, 0.9)
+	sb.bg_color = Color(0.08, 0.10, 0.14, 0.92)
+	sb.border_color = Color(0.92, 0.36, 0.24, 0.95)
 	sb.set_border_width_all(2)
 	sb.set_corner_radius_all(6)
-	sb.content_margin_left = 12
-	sb.content_margin_right = 12
+	sb.content_margin_left = 14
+	sb.content_margin_right = 14
 	sb.content_margin_top = 6
-	sb.content_margin_bottom = 6
+	sb.content_margin_bottom = 8
 	event_panel.add_theme_stylebox_override("panel", sb)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 2)
+	vbox.add_theme_constant_override("separation", 3)
+	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	event_panel.add_child(vbox)
 
-	event_title_label = Label.new()
-	event_title_label.text = "EVENT TITLE"
-	event_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	event_title_label.add_theme_font_size_override("font_size", 12)
-	event_title_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.40))
+	event_title_label = UIAssets.create_label(
+		"EVENT TITLE", 12, UIAssets.COL_GOLD, "black",
+		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER, 0.45
+	)
 	vbox.add_child(event_title_label)
 
-	event_sub_label = Label.new()
-	event_sub_label.text = "Objective status..."
-	event_sub_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	event_sub_label.add_theme_font_size_override("font_size", 10)
-	event_sub_label.add_theme_color_override("font_color", COL_TEXT_LIGHT)
+	event_sub_label = UIAssets.create_label(
+		"Objective status...", 11, COL_TEXT_LIGHT, "semibold",
+		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
+	)
 	vbox.add_child(event_sub_label)
 
 	event_hp_bar = ProgressBar.new()
-	event_hp_bar.custom_minimum_size = Vector2(350, 8)
+	event_hp_bar.custom_minimum_size = Vector2(376, 9)
 	event_hp_bar.min_value = 0.0
 	event_hp_bar.max_value = 100.0
 	event_hp_bar.value = 100.0
 	event_hp_bar.show_percentage = false
+	event_hp_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var sb_bg := StyleBoxFlat.new()
-	sb_bg.bg_color = Color(0.15, 0.15, 0.20, 0.8)
+	sb_bg.bg_color = Color(0.14, 0.16, 0.20, 0.90)
 	sb_bg.set_corner_radius_all(3)
 	event_hp_bar.add_theme_stylebox_override("background", sb_bg)
 	var sb_fill := StyleBoxFlat.new()
-	sb_fill.bg_color = Color(0.90, 0.25, 0.20, 1.0)
+	sb_fill.bg_color = Color(0.90, 0.28, 0.20, 1.0)
 	sb_fill.set_corner_radius_all(3)
 	event_hp_bar.add_theme_stylebox_override("fill", sb_fill)
 	vbox.add_child(event_hp_bar)
@@ -637,18 +514,18 @@ func _on_event_started(event_data: Dictionary) -> void:
 	if dnc and "event_system" in dnc and dnc.event_system and "current_game_mode" in dnc.event_system:
 		is_challenge = (dnc.event_system.current_game_mode == 1)
 
-	var title: String = event_data.get("title", "EVENT")
+	var title: String = str(event_data.get("title", "EVENT"))
 	if is_challenge:
 		event_title_label.text = "🔥 CHALLENGE: " + title
 		event_title_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.30))
 	else:
 		event_title_label.text = "★ " + title
-		event_title_label.add_theme_color_override("font_color", Color(1.0, 0.85, 0.40))
+		event_title_label.add_theme_color_override("font_color", UIAssets.COL_GOLD)
 
-	event_sub_label.text = event_data.get("desc", "")
+	event_sub_label.text = str(event_data.get("desc", ""))
 	event_sub_label.add_theme_color_override("font_color", COL_TEXT_LIGHT)
 	var target: float = float(event_data.get("quota_target", 1.0))
-	var unit: String = event_data.get("target_unit", "")
+	var unit: String = str(event_data.get("target_unit", ""))
 	if unit == "HP":
 		event_hp_bar.visible = true
 		event_hp_bar.max_value = target
@@ -680,12 +557,13 @@ func _on_event_progress_updated(cur: float, target: float, status_text: String) 
 		event_hp_bar.value = cur
 
 
-func _on_event_completed(event_id: String) -> void:
+func _on_event_completed(_event_id: String) -> void:
 	if not is_instance_valid(event_panel):
 		return
 	event_title_label.text = "🎉 EVENT COMPLETED!"
+	event_title_label.add_theme_color_override("font_color", COL_GREEN)
 	event_sub_label.text = "Target terpenuhi! Siap pulang saat senja."
-	event_sub_label.add_theme_color_override("font_color", Color(0.4, 1.0, 0.6))
+	event_sub_label.add_theme_color_override("font_color", COL_GREEN)
 	if is_instance_valid(event_hp_bar):
 		event_hp_bar.visible = false
 
@@ -693,43 +571,203 @@ func _on_event_completed(event_id: String) -> void:
 func _update_event_display(es: Node) -> void:
 	if not is_instance_valid(event_panel):
 		return
-	if not es.is_event_active:
-		event_panel.visible = false
-	else:
-		event_panel.visible = true
+	event_panel.visible = bool(es.is_event_active)
+
+
+# ===========================================================================
+# Public API & Live Sync
+# ===========================================================================
+
+func update_quota(current: float, target: float, unit: String = "SC") -> void:
+	current_quota_val = current
+	max_quota_val = maxf(1.0, target)
+	quota_unit = unit
+
+	if is_instance_valid(quota_val_label):
+		var cur_int := int(current)
+		var max_int := int(target)
+		var cur_col := "#52E67A" if current >= target and target > 0.0 else "#F5AE24"
+		quota_val_label.text = "[right][color=%s][b]%03d[/b][/color] [color=#7A8290]/[/color] [color=#F2F4F8][b]%d[/b][/color] [color=#F5AE24]%s[/color][/right]" % [
+			cur_col, cur_int, max_int, unit
+		]
+
+	if is_instance_valid(quota_progress_bar):
+		var pct := clampf((current / max_quota_val) * 100.0, 0.0, 100.0)
+		quota_progress_bar.value = pct
+		quota_progress_bar.modulate = Color(0.55, 1.25, 0.68) if pct >= 100.0 else Color.WHITE
+
+
+func sync_perks_from_player(player: Node) -> void:
+	if player == null or not ("owned_perks" in player):
+		return
+	var owned: Array = player.owned_perks
+	for i in range(_perk_slot_widgets.size()):
+		if i < owned.size():
+			equip_perk(i, str(owned[i]))
+		else:
+			_perk_slot_widgets[i].set_empty()
+	_last_owned_perks_sig = ",".join(owned)
+
+
+func _sync_perks_if_changed(player: Node) -> void:
+	if not ("owned_perks" in player):
+		return
+	var sig := ",".join(player.owned_perks)
+	if sig != _last_owned_perks_sig:
+		sync_perks_from_player(player)
+
+
+func equip_perk(slot_index: int, perk_id: String) -> void:
+	if slot_index < 0 or slot_index >= _perk_slot_widgets.size():
+		return
+	var slot: PerkSlotWidget = _perk_slot_widgets[slot_index]
+	match perk_id:
+		"hivis_vest":
+			slot.set_perk("hivis_vest", "HI-VIS", "COMMON")
+		"can_crusher":
+			slot.set_perk("can_crusher", "CRUSH", "COMMON")
+		"piggy_jar":
+			slot.set_perk("piggy_jar", "PIGGY", "UNCOMMON")
+		"speed_boots":
+			slot.set_perk("speed_boots", "BOOTS", "COMMON")
+		"magnet_glove":
+			slot.set_perk("magnet_glove", "MAGNET", "UNCOMMON")
+		"big_bag":
+			slot.set_perk("big_bag", "BIG BAG", "COMMON")
+		_:
+			slot.set_perk(perk_id, perk_id.to_upper().substr(0, 7), "COMMON")
+
+
+func update_streak(count: int) -> void:
+	current_streak = count
+	current_mult = 1.0 + float(count) * 0.1
+	if is_instance_valid(streak_counter):
+		streak_counter.set_value(current_streak)
+	if is_instance_valid(mult_label):
+		mult_label.text = "MULT: ×%.1f" % current_mult
+
+
+func update_time_display(time_str: String, is_night: bool = false, is_quota_met: bool = false) -> void:
+	if is_instance_valid(time_label):
+		var prefix := "🌙 " if is_night else ("✓ " if is_quota_met else "☀ ")
+		time_label.text = prefix + time_str
+		if is_night:
+			time_label.add_theme_color_override("font_color", Color(0.55, 0.14, 0.12))
+		elif is_quota_met:
+			time_label.add_theme_color_override("font_color", Color(0.10, 0.42, 0.18))
+		else:
+			time_label.add_theme_color_override("font_color", Color(0.14, 0.11, 0.08))
+
+
+# ===========================================================================
+# System Signal Callbacks
+# ===========================================================================
+
+func _on_player_item_bagged(_item_id: String, _value: float, _total_sc: float) -> void:
+	update_streak(current_streak + 1)
+
+	var player := get_tree().get_first_node_in_group("player")
+	if player:
+		_refresh_inventory_from_player(player)
+
+	var dnc := get_tree().get_first_node_in_group("day_night_cycle")
+	if dnc and dnc.has_method("get_daily_progress_amount"):
+		var cur := float(dnc.get_daily_progress_amount())
+		var tgt := float(dnc.get_current_quota())
+		update_quota(cur, tgt, "KG" if dnc.quota_type == DayNightCycle.QuotaType.ITEM_COUNT else "SC")
+
+
+func _on_dnc_time_updated(_day_progress: float, _hour: int, _minute: int) -> void:
+	var dnc := get_tree().get_first_node_in_group("day_night_cycle")
+	if dnc:
+		var remaining_seconds: float = maxf(0.0, dnc.day_duration_seconds - dnc.day_elapsed_seconds)
+		var rem_min: int = int(remaining_seconds / 60.0)
+		var rem_sec: int = int(remaining_seconds) % 60
+		var time_str := "%02d:%02d" % [rem_min, rem_sec]
+		var cur := float(dnc.get_daily_progress_amount())
+		var tgt := float(dnc.get_current_quota())
+		update_time_display(time_str, dnc.is_night, cur >= tgt)
+		update_quota(cur, tgt, "KG" if dnc.quota_type == DayNightCycle.QuotaType.ITEM_COUNT else "SC")
+
+
+func _on_dnc_day_started(_day_number: int) -> void:
+	update_streak(0)
+	var dnc := get_tree().get_first_node_in_group("day_night_cycle")
+	if dnc:
+		update_quota(0.0, dnc.get_current_quota(), "KG" if dnc.quota_type == DayNightCycle.QuotaType.ITEM_COUNT else "SC")
+
+
+func _on_dnc_night_started(_day_number: int, _quota_met: bool) -> void:
+	update_time_display("00:00", true)
+
+
+func _refresh_inventory_from_player(player: Node) -> void:
+	if _inventory_slots.is_empty():
+		return
+
+	var items: Array = []
+	if "trash_inventory_items" in player:
+		items = player.trash_inventory_items
+
+	for i in range(_inventory_slots.size()):
+		var slot_widget: InventorySlotWidget = _inventory_slots[i] as InventorySlotWidget
+		if not slot_widget:
+			continue
+		if i < items.size():
+			var item_data: Dictionary = items[items.size() - 1 - i]
+			var id_str: String = str(item_data.get("id", "trash")).to_lower()
+			if id_str.contains("can") or id_str.contains("metal"):
+				slot_widget.set_item(InventorySlotWidget.ItemType.METAL, "METAL")
+			elif id_str.contains("bottle") or id_str.contains("glass"):
+				slot_widget.set_item(InventorySlotWidget.ItemType.GLASS, "GLASS")
+			elif id_str.contains("plastic"):
+				slot_widget.set_item(InventorySlotWidget.ItemType.PLASTIC, "PLASTIC")
+			else:
+				slot_widget.set_item(InventorySlotWidget.ItemType.OTHER, id_str.to_upper().substr(0, 7))
+		else:
+			slot_widget.set_empty()
 
 
 # ===========================================================================
 # Widgets
 # ===========================================================================
 
-## 4-Digit Odometer Flip Box [ 0 | 0 | 0 | 4 ] (121 x 39)
-## Renders digit text directly inside the 4 slots cutout in hud_streak_clicker_bg.png
+## 4-Digit Mechanical Odometer aligned pixel-accurately inside hud_streak_clicker_bg.png
 class OdometerWidget extends Control:
-	var value: int = 4
+	const SLOT_XS := [28.0, 56.0, 84.0, 112.0]
+	const SLOT_Y  := 45.0
+	const SLOT_W  := 23.0
+	const SLOT_H  := 34.0
 
-	func _init() -> void:
-		custom_minimum_size = Vector2(121, 39)
-		size = Vector2(121, 39)
+	var value: int = 0
+	var _digit_labels: Array[Label] = []
+
+	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_digit_labels.clear()
+		for i in range(4):
+			var lbl := UIAssets.create_label(
+				"0", 20, Color(0.42, 0.46, 0.52, 0.85), "mono",
+				HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
+			)
+			lbl.position = Vector2(SLOT_XS[i], SLOT_Y)
+			lbl.size = Vector2(SLOT_W, SLOT_H)
+			add_child(lbl)
+			_digit_labels.append(lbl)
+		set_value(value)
 
 	func set_value(v: int) -> void:
-		value = v
-		queue_redraw()
-
-	func _draw() -> void:
-		var slot_w := 28.0
-		var gap := 3.0
-		var font := ThemeDB.fallback_font
-		var str_val := "%04d" % clampi(value, 0, 9999)
-
-		for i in range(4):
-			var pos := Vector2(float(i) * (slot_w + gap), 0)
-			var is_active := (i == 3) or (int(str_val[i]) > 0)
-			var char_col := Color(0.96, 0.62, 0.12, 1.0) if is_active else Color(0.40, 0.44, 0.50, 0.8)
-			# Subtle center seam line across the digit
-			draw_line(pos + Vector2(2, 19), pos + Vector2(slot_w - 2, 19), Color(0.04, 0.05, 0.06, 0.7), 1.0)
-			draw_string(font, pos + Vector2(0, 26), str_val[i], HORIZONTAL_ALIGNMENT_CENTER, int(slot_w), 20, char_col)
+		value = clampi(v, 0, 9999)
+		var str_val := "%04d" % value
+		var seen_nonzero := false
+		for i in range(min(4, _digit_labels.size())):
+			var ch := str_val[i]
+			if ch != "0":
+				seen_nonzero = true
+			var is_highlight: bool = (i == 3) or seen_nonzero
+			var col := Color(0.98, 0.64, 0.14, 1.0) if (i == 3) else (Color(0.92, 0.94, 0.96, 1.0) if is_highlight else Color(0.42, 0.46, 0.52, 0.80))
+			_digit_labels[i].text = ch
+			_digit_labels[i].add_theme_color_override("font_color", col)
 
 
 ## Bottom-Left Inventory Slot (#1 - #4) with HD empty/filled textures (66 x 94)
@@ -748,38 +786,37 @@ class InventorySlotWidget extends Control:
 	func _ready() -> void:
 		custom_minimum_size = Vector2(66, 94)
 		size = Vector2(66, 94)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 		_bg_rect = UIAssets.create_texture_rect("res://UI/01_hud/hud_pack_slot_empty.png")
 		_bg_rect.position = Vector2.ZERO
 		_bg_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(_bg_rect)
 
-		_num_label = Label.new()
-		_num_label.text = "#%d" % slot_number
+		_num_label = UIAssets.create_label(
+			"#%d" % slot_number, 9, Color(0.48, 0.54, 0.62, 1.0), "mono",
+			HORIZONTAL_ALIGNMENT_RIGHT, VERTICAL_ALIGNMENT_CENTER
+		)
 		_num_label.position = Vector2(4, 4)
-		_num_label.size = Vector2(58, 14)
-		_num_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		_num_label.add_theme_color_override("font_color", Color(0.45, 0.50, 0.58, 1.0))
-		_num_label.add_theme_font_size_override("font_size", 9)
+		_num_label.size = Vector2(56, 14)
 		add_child(_num_label)
 
-		# Icon label rendered ON TOP of the background texture
 		_icon_label = Label.new()
 		_icon_label.text = ""
 		_icon_label.position = Vector2(0, 18)
 		_icon_label.size = Vector2(66, 48)
 		_icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_icon_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		_icon_label.add_theme_font_size_override("font_size", 24)
+		_icon_label.add_theme_font_size_override("font_size", 26)
+		_icon_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(_icon_label)
 
-		_item_label = Label.new()
-		_item_label.text = "EMPTY"
+		_item_label = UIAssets.create_label(
+			"EMPTY", 9, Color(0.36, 0.41, 0.48, 1.0), "black",
+			HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
+		)
 		_item_label.position = Vector2(0, 72)
 		_item_label.size = Vector2(66, 16)
-		_item_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_item_label.add_theme_color_override("font_color", Color(0.35, 0.40, 0.48, 1.0))
-		_item_label.add_theme_font_size_override("font_size", 9)
 		add_child(_item_label)
 
 	func set_item(type: ItemType, label_text: String) -> void:
@@ -794,13 +831,13 @@ class InventorySlotWidget extends Control:
 					_item_label.add_theme_color_override("font_color", Color(0.96, 0.62, 0.12))
 					if is_instance_valid(_icon_label): _icon_label.text = "🥫"
 				ItemType.GLASS:
-					_item_label.add_theme_color_override("font_color", Color(0.20, 0.85, 0.40))
+					_item_label.add_theme_color_override("font_color", Color(0.24, 0.88, 0.44))
 					if is_instance_valid(_icon_label): _icon_label.text = "🍾"
 				ItemType.PLASTIC:
-					_item_label.add_theme_color_override("font_color", Color(0.25, 0.65, 0.95))
+					_item_label.add_theme_color_override("font_color", Color(0.28, 0.68, 0.96))
 					if is_instance_valid(_icon_label): _icon_label.text = "🧴"
 				_:
-					_item_label.add_theme_color_override("font_color", Color(0.90, 0.85, 0.70))
+					_item_label.add_theme_color_override("font_color", Color(0.92, 0.86, 0.72))
 					if is_instance_valid(_icon_label): _icon_label.text = "📦"
 
 	func set_empty() -> void:
@@ -812,7 +849,7 @@ class InventorySlotWidget extends Control:
 			_icon_label.text = ""
 		if is_instance_valid(_item_label):
 			_item_label.text = "EMPTY"
-			_item_label.add_theme_color_override("font_color", Color(0.35, 0.40, 0.48, 1.0))
+			_item_label.add_theme_color_override("font_color", Color(0.36, 0.41, 0.48, 1.0))
 
 
 ## Bottom-Right Active Gear / Perk Slot with HD gadget slot rarity textures (58 x 94)
@@ -822,19 +859,29 @@ class PerkSlotWidget extends Control:
 	var rarity: String = "COMMON"
 
 	var _bg_rect: TextureRect = null
+	var _art_rect: TextureRect = null
 	var _icon_label: Label = null
 	var _title_label: Label = null
 
 	func _ready() -> void:
 		custom_minimum_size = Vector2(58, 94)
 		size = Vector2(58, 94)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 		_bg_rect = UIAssets.create_texture_rect("res://UI/01_hud/hud_gadget_slot_common.png")
 		_bg_rect.position = Vector2.ZERO
 		_bg_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(_bg_rect)
 
-		# Icon label rendered ON TOP of the background texture
+		_art_rect = TextureRect.new()
+		_art_rect.position = Vector2(7, 18)
+		_art_rect.size = Vector2(44, 44)
+		_art_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		_art_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		_art_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_art_rect.visible = false
+		add_child(_art_rect)
+
 		_icon_label = Label.new()
 		_icon_label.text = ""
 		_icon_label.position = Vector2(0, 16)
@@ -842,15 +889,15 @@ class PerkSlotWidget extends Control:
 		_icon_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_icon_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		_icon_label.add_theme_font_size_override("font_size", 26)
+		_icon_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(_icon_label)
 
-		_title_label = Label.new()
-		_title_label.text = perk_title
+		_title_label = UIAssets.create_label(
+			perk_title, 8, Color(0.40, 0.45, 0.52, 1.0), "black",
+			HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
+		)
 		_title_label.position = Vector2(0, 72)
 		_title_label.size = Vector2(58, 16)
-		_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_title_label.add_theme_color_override("font_color", Color(0.40, 0.45, 0.52, 1.0))
-		_title_label.add_theme_font_size_override("font_size", 9)
 		add_child(_title_label)
 
 		_update_visuals()
@@ -885,30 +932,43 @@ class PerkSlotWidget extends Control:
 		_bg_rect.texture = UIAssets.get_tex(tex_path)
 
 		if perk_id == "":
-			_bg_rect.modulate = Color(0.5, 0.5, 0.5, 0.6)
+			_bg_rect.modulate = Color(0.50, 0.52, 0.56, 0.62)
+			if is_instance_valid(_art_rect):
+				_art_rect.visible = false
 			if is_instance_valid(_icon_label):
 				_icon_label.text = ""
+				_icon_label.visible = true
 			if is_instance_valid(_title_label):
 				_title_label.text = "EMPTY"
-				_title_label.add_theme_color_override("font_color", Color(0.32, 0.36, 0.42))
+				_title_label.add_theme_color_override("font_color", Color(0.36, 0.40, 0.46))
 		else:
 			_bg_rect.modulate = Color.WHITE
-			var icon_char := "⚙️"
-			match perk_id:
-				"hivis_vest":
-					icon_char = "🦺"
-				"piggy_jar":
-					icon_char = "🐷"
-				"can_crusher":
-					icon_char = "🔩"
-				"speed_boots":
-					icon_char = "👟"
-				"magnet_glove":
-					icon_char = "🧲"
-				"big_bag":
-					icon_char = "🛍️"
-			if is_instance_valid(_icon_label):
-				_icon_label.text = icon_char
+			var custom_art := UIAssets.get_card_art(perk_id)
+			if custom_art != null and is_instance_valid(_art_rect):
+				_art_rect.texture = custom_art
+				_art_rect.visible = true
+				if is_instance_valid(_icon_label):
+					_icon_label.visible = false
+			else:
+				if is_instance_valid(_art_rect):
+					_art_rect.visible = false
+				var icon_char := "⚙️"
+				match perk_id:
+					"hivis_vest":
+						icon_char = "🦺"
+					"piggy_jar":
+						icon_char = "🐷"
+					"can_crusher":
+						icon_char = "🔩"
+					"speed_boots":
+						icon_char = "👟"
+					"magnet_glove":
+						icon_char = "🧲"
+					"big_bag":
+						icon_char = "🎒"
+				if is_instance_valid(_icon_label):
+					_icon_label.text = icon_char
+					_icon_label.visible = true
 			if is_instance_valid(_title_label):
 				_title_label.text = perk_title
-				_title_label.add_theme_color_override("font_color", Color(0.90, 0.88, 0.80))
+				_title_label.add_theme_color_override("font_color", Color(0.94, 0.91, 0.82))
