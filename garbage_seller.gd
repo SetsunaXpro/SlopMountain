@@ -73,10 +73,6 @@ func _process(delta: float) -> void:
 	if _sell_cooldown > 0.0:
 		_sell_cooldown = maxf(0.0, _sell_cooldown - delta)
 
-	if _player_nearby and _sell_cooldown <= 0.0:
-		if InputMap.has_action(input_interact) and Input.is_action_just_pressed(input_interact):
-			_sell_all_garbage()
-
 
 func _check_player_proximity() -> void:
 	if not is_instance_valid(_player_ref):
@@ -92,6 +88,8 @@ func _check_player_proximity() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not _player_nearby or not is_instance_valid(_player_ref) or _sell_cooldown > 0.0:
 		return
+	if _player_ref.has_method("is_any_menu_open") and _player_ref.is_any_menu_open():
+		return
 
 	var pressed := false
 	if InputMap.has_action(input_interact) and event.is_action_pressed(input_interact):
@@ -101,6 +99,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			pressed = true
 
 	if pressed:
+		get_viewport().set_input_as_handled()
 		_sell_all_garbage()
 
 

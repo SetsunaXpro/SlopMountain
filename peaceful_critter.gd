@@ -143,6 +143,7 @@ var _net_pos: Vector3 = Vector3.ZERO
 var _net_rot_y: float = 0.0
 var _net_sync_accum: float = 0.0
 var stun_timer: float = 0.0
+var _feed_cooldown: float = 0.0
 
 
 func apply_stun(duration: float) -> void:
@@ -161,7 +162,24 @@ func _do_stun(duration: float) -> void:
 	stun_timer = maxf(stun_timer, duration)
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	if not _player_nearby or is_tamed or _feed_cooldown > 0.0:
+		return
+	if is_instance_valid(_player_ref) and _player_ref.has_method("is_any_menu_open") and _player_ref.is_any_menu_open():
+		return
+	var pressed := false
+	if InputMap.has_action("interact") and event.is_action_pressed("interact"):
+		pressed = true
+	elif event is InputEventKey and event.pressed and not event.echo and (event.keycode == KEY_E or event.physical_keycode == KEY_E):
+		pressed = true
+	if pressed:
+		get_viewport().set_input_as_handled()
+		feed_critter()
+
+
 func _physics_process(delta: float) -> void:
+	if _feed_cooldown > 0.0:
+		_feed_cooldown = maxf(0.0, _feed_cooldown - delta)
 	if stun_timer > 0.0:
 		stun_timer = maxf(0.0, stun_timer - delta)
 
@@ -169,9 +187,6 @@ func _physics_process(delta: float) -> void:
 		var t := clampf(delta * 12.0, 0.0, 1.0)
 		global_position = global_position.lerp(_net_pos, t)
 		rotation.y = lerp_angle(rotation.y, _net_rot_y, t)
-		if _player_nearby and not is_tamed:
-			if Input.is_action_just_pressed("interact") or Input.is_key_pressed(KEY_E):
-				feed_critter()
 		return
 
 	if not is_on_floor():
@@ -231,10 +246,6 @@ func _physics_process(delta: float) -> void:
 			_net_sync_accum = 0.0
 			_rpc_sync_pose.rpc(global_position, rotation.y)
 
-	if _player_nearby and not is_tamed:
-		if Input.is_action_just_pressed("interact") or Input.is_key_pressed(KEY_E):
-			feed_critter()
-
 
 func _pick_new_wander_target() -> void:
 	_wander_timer = randf_range(2.5, 5.0)
@@ -265,16 +276,32 @@ func _update_prompt() -> void:
 
 
 func feed_critter() -> void:
-	if is_tamed:
+	if is_tamed or _feed_cooldown > 0.0:
 		return
+	_feed_cooldown = 0.35
 
-	# Deduct 1 organic item or snack if available on player
-	if is_instance_valid(_player_ref) and "trash_bag" in _player_ref:
-		for organic_id in ["banana", "banana_peel", "kulit_pisang", "apple", "organic", "compost"]:
-			if _player_ref.trash_bag.get(organic_id, 0) > 0:
-				_player_ref.trash_bag[organic_id] -= 1
-				_player_ref.total_items_in_bag = maxi(0, _player_ref.total_items_in_bag - 1)
-				_player_ref._update_hud()
+	# Deduct 1 organic item or snack from BOTH trash_bag and trash_inventory_items to keep HUD & bag in sync
+	if is_instance_valid(_player_ref) and "trash_inventory_items" in _player_ref:
+		var organic_kws := ["banana", "pisang", "apple", "organic", "organik", "compost", "food", "fruit", "buah", "leaf", "daun"]
+		var items: Array = _player_ref.trash_inventory_items
+		for i in range(items.size() - 1, -1, -1):
+			var id_raw: String = str(items[i].get("id", ""))
+			var id_low := id_raw.to_lower()
+			var is_org := false
+			for kw in organic_kws:
+				if id_low.contains(kw):
+					is_org = true
+					break
+			if is_org:
+				items.remove_at(i)
+				if "trash_bag" in _player_ref and _player_ref.trash_bag.has(id_raw):
+					_player_ref.trash_bag[id_raw] -= 1
+					if _player_ref.trash_bag[id_raw] <= 0:
+						_player_ref.trash_bag.erase(id_raw)
+				if "total_items_in_bag" in _player_ref:
+					_player_ref.total_items_in_bag = maxi(0, _player_ref.total_items_in_bag - 1)
+				if _player_ref.has_method("_update_hud"):
+					_player_ref._update_hud()
 				break
 
 	hearts_fed += 1

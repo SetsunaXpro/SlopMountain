@@ -102,10 +102,15 @@ func _process(_delta: float) -> void:
 	if dnc.has_method("get_daily_progress_amount") and dnc.has_method("get_current_quota"):
 		cur = float(dnc.get_daily_progress_amount())
 		tgt = float(dnc.get_current_quota())
-		quota_passed = (cur >= tgt)
 		var unit: String = "SC"
-		if "quota_type" in dnc:
+		if dnc.has_method("get_quota_unit"):
+			unit = str(dnc.get_quota_unit())
+		elif "quota_type" in dnc:
 			unit = "KG" if dnc.quota_type == DayNightCycle.QuotaType.ITEM_COUNT else "SC"
+		if dnc.has_method("is_daily_quota_met"):
+			quota_passed = bool(dnc.is_daily_quota_met())
+		else:
+			quota_passed = (cur >= tgt)
 		update_quota(cur, tgt, unit)
 
 	if "day_duration_seconds" in dnc and "day_elapsed_seconds" in dnc:
@@ -659,7 +664,11 @@ func equip_perk(slot_index: int, perk_id: String) -> void:
 
 func update_streak(count: int) -> void:
 	current_streak = count
-	current_mult = 1.0 + float(count) * 0.1
+	var per_item_mult := 0.1
+	var player := get_tree().get_first_node_in_group("player") if is_inside_tree() else null
+	if player and "extra_mult_per_item" in player:
+		per_item_mult += float(player.extra_mult_per_item)
+	current_mult = 1.0 + float(count) * per_item_mult
 	if is_instance_valid(streak_counter):
 		streak_counter.set_value(current_streak)
 	if is_instance_valid(mult_label):
@@ -735,12 +744,20 @@ func _refresh_inventory_from_player(player: Node) -> void:
 		if i < items.size():
 			var item_data: Dictionary = items[items.size() - 1 - i]
 			var id_str: String = str(item_data.get("id", "trash")).to_lower()
-			if id_str.contains("can") or id_str.contains("metal"):
+			if id_str.contains("compacted_metal"):
+				slot_widget.set_item(InventorySlotWidget.ItemType.METAL, "METAL+")
+			elif id_str.contains("compacted_plastic"):
+				slot_widget.set_item(InventorySlotWidget.ItemType.PLASTIC, "PLAST+")
+			elif id_str.contains("compost"):
+				slot_widget.set_item(InventorySlotWidget.ItemType.ORGANIC, "COMPOST")
+			elif id_str.contains("can") or id_str.contains("metal") or id_str.contains("kaleng") or id_str.contains("tin"):
 				slot_widget.set_item(InventorySlotWidget.ItemType.METAL, "METAL")
-			elif id_str.contains("bottle") or id_str.contains("glass"):
+			elif id_str.contains("bottle") or id_str.contains("glass") or id_str.contains("botol"):
 				slot_widget.set_item(InventorySlotWidget.ItemType.GLASS, "GLASS")
-			elif id_str.contains("plastic"):
+			elif id_str.contains("plastic") or id_str.contains("plastik"):
 				slot_widget.set_item(InventorySlotWidget.ItemType.PLASTIC, "PLASTIC")
+			elif id_str.contains("banana") or id_str.contains("pisang") or id_str.contains("organic") or id_str.contains("organik") or id_str.contains("apple") or id_str.contains("food"):
+				slot_widget.set_item(InventorySlotWidget.ItemType.ORGANIC, "ORGANIC")
 			else:
 				slot_widget.set_item(InventorySlotWidget.ItemType.OTHER, id_str.to_upper().substr(0, 7))
 		else:
@@ -791,7 +808,7 @@ class OdometerWidget extends Control:
 
 ## Bottom-Left Inventory Slot (#1 - #4) snapped cleanly inside hud_pack_caddy_bg.png cutout (57 x 85)
 class InventorySlotWidget extends Control:
-	enum ItemType { EMPTY, METAL, GLASS, PLASTIC, OTHER }
+	enum ItemType { EMPTY, METAL, GLASS, PLASTIC, ORGANIC, OTHER }
 
 	var slot_number: int = 1
 	var item_type: ItemType = ItemType.EMPTY
@@ -849,6 +866,10 @@ class InventorySlotWidget extends Control:
 				tint = Color(0.11, 0.19, 0.26, 0.92)
 				accent = Color(0.50, 0.80, 0.98)
 				icon_txt = "🧴"
+			ItemType.ORGANIC:
+				tint = Color(0.14, 0.24, 0.12, 0.92)
+				accent = Color(0.56, 0.92, 0.36)
+				icon_txt = "🌱" if label_text == "COMPOST" else "🍌"
 		if is_instance_valid(_fill_panel):
 			var sb := StyleBoxFlat.new()
 			sb.bg_color = tint

@@ -333,6 +333,7 @@ func _ready() -> void:
 	look_rotation.y = rotation.y
 	look_rotation.x = head.rotation.x
 	pickup_ray.target_position = Vector3(0, 0, -pickup_distance)
+	day_start_slop_credit = slop_credit
 	add_to_group("player")  # Waterbody script uses this group for water physics
 	_ensure_day_night_cycle()
 	_setup_hud()
@@ -691,11 +692,14 @@ func bag_object(object: Node) -> void:
 		is_trash_grenade_equipped = false
 		equipped_trash_data = {}
 
-	# Add to inventory & SlopCredit
+	# Add to inventory & SlopCredit (apply Can Crusher metal multiplier + streak mult)
 	var mult: float = 1.0
 	if is_instance_valid(game_hud):
 		mult = game_hud.current_mult
-	var final_val: float = val * mult
+	var id_lower := id.to_lower()
+	var is_metal := id_lower.contains("can") or id_lower.contains("metal") or id_lower.contains("kaleng") or id_lower.contains("besi") or id_lower.contains("tin")
+	var metal_bonus := metal_weight_multiplier if is_metal else 1.0
+	var final_val: float = val * mult * metal_bonus
 
 	trash_bag[id] = trash_bag.get(id, 0) + 1
 	trash_inventory_items.append({
@@ -862,17 +866,25 @@ func toggle_equip_trash_grenade() -> void:
 			trash_bag.erase(id)
 	total_items_in_bag = max(0, total_items_in_bag - 1)
 
-	# Instantiate the scene
-	var scene_path: String = item_data.get("scene_path", "")
-	var scene: PackedScene = null
-	if scene_path != "" and ResourceLoader.exists(scene_path):
-		scene = load(scene_path)
-	elif ResourceLoader.exists("res://plastic.tscn"):
-		scene = load("res://plastic.tscn")
-	elif ResourceLoader.exists("res://trash_object.tscn"):
-		scene = load("res://trash_object.tscn")
+	# Instantiate the scene (or procedural compacted/compost cube so boss/critter critical hits work!)
+	var instance: Node = null
+	var id_low := id.to_lower()
+	var is_procedural_compacted := (id_low == "compacted_metal" or id_low == "compacted_plastic" or id_low == "compost")
+	if is_procedural_compacted:
+		instance = _create_compacted_throw_cube(id_low, float(item_data.get("value", 5.0)), float(item_data.get("weight", 2.0)))
+	else:
+		var scene_path: String = item_data.get("scene_path", "")
+		var scene: PackedScene = null
+		if scene_path != "" and ResourceLoader.exists(scene_path):
+			scene = load(scene_path)
+		elif ResourceLoader.exists("res://plastic.tscn"):
+			scene = load("res://plastic.tscn")
+		elif ResourceLoader.exists("res://trash_object.tscn"):
+			scene = load("res://trash_object.tscn")
+		if scene:
+			instance = scene.instantiate()
 
-	if not scene:
+	if not instance:
 		_show_feedback("Could not load trash scene!")
 		trash_inventory_items.append(item_data)
 		trash_bag[id] = trash_bag.get(id, 0) + 1
@@ -880,7 +892,6 @@ func toggle_equip_trash_grenade() -> void:
 		_update_hud()
 		return
 
-	var instance = scene.instantiate()
 	if not instance is RigidBody3D:
 		instance.queue_free()
 		return
@@ -1018,6 +1029,7 @@ func throw_object():
 
 		if throw_costs_credit:
 			slop_credit = maxf(0.0, slop_credit - val)
+			daily_sc_earned = maxf(0.0, daily_sc_earned - val)
 			slop_credit_changed.emit(slop_credit, -val)
 
 		_show_feedback("Hauled %s like a grenade!" % id.capitalize())
@@ -1331,8 +1343,64 @@ func _update_aim_prompt() -> void:
 # Day / Night Callbacks
 # ===========================================================================
 
+## Procedural compacted / compost RigidBody3D preserving "compacted" group for Boss & Pest crits
+func _create_compacted_throw_cube(cube_id: String, val: float, wt: float) -> RigidBody3D:
+	var body := RigidBody3D.new()
+	body.mass = maxf(0.5, wt)
+	var cube_sz := Vector3(0.4, 0.4, 0.4)
+	var mat := StandardMaterial3D.new()
+	if cube_id == "compacted_metal":
+		body.name = "CompactedMetalCube"
+		mat.albedo_color = Color(0.65, 0.7, 0.75, 1.0)
+		mat.metallic = 0.9
+		mat.roughness = 0.25
+	elif cube_id == "compacted_plastic":
+		body.name = "CompactedPlasticCube"
+		cube_sz = Vector3(0.35, 0.35, 0.35)
+		mat.albedo_color = Color(0.2, 0.6, 0.95, 0.9)
+		mat.roughness = 0.45
+	else:
+		body.name = "CompostBag"
+		cube_sz = Vector3(0.4, 0.3, 0.4)
+		mat.albedo_color = Color(0.35, 0.25, 0.12, 1.0)
+		mat.roughness = 0.95
+
+	var col_shape := CollisionShape3D.new()
+	var box_shape := BoxShape3D.new()
+	box_shape.size = cube_sz
+	col_shape.shape = box_shape
+	body.add_child(col_shape)
+
+	var mesh := MeshInstance3D.new()
+	var box_mesh := BoxMesh.new()
+	box_mesh.size = cube_sz
+	mesh.mesh = box_mesh
+	mesh.material_override = mat
+	body.add_child(mesh)
+
+	var script_text := """
+extends RigidBody3D
+var item_id: String = "%s"
+var collection_value: float = %.2f
+var weight: float = %.2f
+func _ready() -> void:
+	add_to_group("floatable")
+	add_to_group("trash")
+	add_to_group("compacted")
+func collect() -> void:
+	queue_free()
+""" % [cube_id, val, wt]
+	var scr := GDScript.new()
+	scr.source_code = script_text
+	scr.reload()
+	body.set_script(scr)
+	return body
+
+
 ## Called when the DayNightCycle transitions to a new day
 func on_new_day_started() -> void:
+	if is_building:
+		cancel_build_mode()
 	# Piggy Jar end-of-day interest: +$1 per $5 of total SC
 	if piggy_jar_active and slop_credit >= 5.0:
 		var interest: float = floorf(slop_credit / 5.0)
@@ -1343,16 +1411,56 @@ func on_new_day_started() -> void:
 	day_start_slop_credit = slop_credit
 	daily_items_bagged = 0
 	daily_sc_earned = 0.0
+	_update_hud()
 	_show_feedback("☀️ Good morning! New day has begun.")
 
 
 ## Called when the day is retried after a failed sunset quota
 func on_day_retried() -> void:
+	if is_building:
+		cancel_build_mode()
 	slop_credit = day_start_slop_credit
 	daily_items_bagged = 0
 	daily_sc_earned = 0.0
 	_update_hud()
 	_show_feedback("🔄 Day restarted! Meet the quota before sunset.")
+
+
+## Full clean reset when starting a fresh Shift / Challenge run from Main Menu
+func reset_for_new_run() -> void:
+	if is_building:
+		cancel_build_mode()
+	if is_trash_grenade_equipped:
+		holster_equipped_grenade()
+	if held_object and is_instance_valid(held_object):
+		drop_object()
+	slop_credit = 15.0
+	day_start_slop_credit = 15.0
+	daily_items_bagged = 0
+	daily_sc_earned = 0.0
+	trash_bag.clear()
+	trash_inventory_items.clear()
+	total_items_in_bag = 0
+	owned_perks.clear()
+	owned_machines.clear()
+	placed_machines.clear()
+	has_compass = false
+	extra_mult_per_item = 0.0
+	metal_weight_multiplier = 1.0
+	piggy_jar_active = false
+	pickup_range_bonus = 0.0
+	pickup_distance = 5.0
+	base_speed = 7.0
+	sprint_speed = 10.0
+	max_bag_capacity = 0
+	selected_hotbar_slot = 0
+	selected_machine_index = 0
+	if is_instance_valid(pickup_ray):
+		pickup_ray.target_position = Vector3(0, 0, -pickup_distance)
+	if is_instance_valid(game_hud):
+		game_hud.sync_perks_from_player(self)
+		game_hud.update_streak(0)
+	_update_hud()
 
 
 func _ensure_day_night_cycle() -> void:
@@ -1560,6 +1668,11 @@ func toggle_pause_menu() -> void:
 # ===========================================================================
 
 func select_machine_by_id(mid: String) -> void:
+	var hotbar_items := _get_hotbar_items()
+	for hi in range(hotbar_items.size()):
+		if hotbar_items[hi].id == mid:
+			selected_hotbar_slot = hi
+			break
 	for i in range(BUILDABLE_MACHINES.size()):
 		if BUILDABLE_MACHINES[i].id == mid:
 			select_machine(i)
@@ -1572,7 +1685,8 @@ func select_machine(index: int) -> void:
 	selected_machine_index = index
 	var m = BUILDABLE_MACHINES[selected_machine_index]
 	var owned_status := " [OWNED]" if is_machine_owned(m.id) else " [NOT OWNED - Press M to Buy]"
-	_show_feedback("[%s] Selected: %s %s%s" % [m.key, m.icon, m.name, owned_status])
+	var display_slot := str(selected_hotbar_slot + 1) if selected_hotbar_slot >= 0 and selected_hotbar_slot < _get_hotbar_items().size() else str(m.key)
+	_show_feedback("[%s] Selected: %s %s%s" % [display_slot, m.icon, m.name, owned_status])
 	_update_machine_hotbar()
 	if is_building:
 		_create_build_preview()
@@ -1590,6 +1704,13 @@ func toggle_build_mode() -> void:
 
 
 func start_build_mode() -> void:
+	var hotbar_items := _get_hotbar_items()
+	if selected_hotbar_slot >= 0 and selected_hotbar_slot < hotbar_items.size():
+		var slot_mid: String = str(hotbar_items[selected_hotbar_slot].id)
+		for i in range(BUILDABLE_MACHINES.size()):
+			if BUILDABLE_MACHINES[i].id == slot_mid:
+				selected_machine_index = i
+				break
 	if selected_machine_index < 0 or selected_machine_index >= BUILDABLE_MACHINES.size():
 		selected_machine_index = 0
 
