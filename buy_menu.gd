@@ -116,6 +116,7 @@ func _ready() -> void:
 	if hud:
 		hud.visible = false
 	UIAssets.sync_bgm()
+	UIAssets.play_sfx("open", 0.03)
 
 
 func _exit_tree() -> void:
@@ -382,6 +383,7 @@ func _build_single_card(index: int, perk: Dictionary, pos_x: float) -> void:
 	)
 	buy_btn.position = Vector2(pos_x + 4.0, 422.0)
 	buy_btn.disabled = owned or (not can_buy)
+	buy_btn.set_meta("suppress_default_click_sfx", true)
 	buy_btn.pressed.connect(_on_buy_pressed.bind(perk, index))
 	_cards_container.add_child(buy_btn)
 	_buy_buttons.append(buy_btn)
@@ -403,6 +405,7 @@ func _build_bottom_bar() -> void:
 		5
 	)
 	_reroll_btn.position = Vector2(30, 638)
+	_reroll_btn.set_meta("suppress_default_click_sfx", true)
 	_reroll_btn.pressed.connect(_on_reroll_pressed)
 	_content.add_child(_reroll_btn)
 
@@ -487,9 +490,11 @@ func _refresh_header() -> void:
 func _on_buy_pressed(perk: Dictionary, card_index: int) -> void:
 	var cost: int = int(perk.get("cost", 0))
 	if _player == null or _player.slop_credit < cost:
+		UIAssets.play_sfx("error", 0.02)
 		_set_mossy_text("Mossy: \"Duitmu kurang, Ranger! Bersihkan sampah lagi!\"")
 		return
 
+	UIAssets.play_sfx("buy", 0.05)
 	if _player.has_method("spend_slop_credit"):
 		_player.spend_slop_credit(float(cost))
 	else:
@@ -515,9 +520,11 @@ func _on_buy_pressed(perk: Dictionary, card_index: int) -> void:
 
 func _on_reroll_pressed() -> void:
 	if _player == null or _player.slop_credit < REROLL_COST:
+		UIAssets.play_sfx("error", 0.02)
 		_set_mossy_text("Mossy: \"Reroll butuh $%d, uangmu kurang!\"" % REROLL_COST)
 		return
 
+	UIAssets.play_sfx("reroll", 0.06)
 	if _player.has_method("spend_slop_credit"):
 		_player.spend_slop_credit(float(REROLL_COST))
 	else:

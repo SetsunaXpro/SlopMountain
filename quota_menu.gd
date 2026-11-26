@@ -68,6 +68,7 @@ func _ready() -> void:
 	if hud:
 		hud.visible = false
 	UIAssets.sync_bgm()
+	UIAssets.play_sfx("open", 0.03)
 
 	if NetworkManager != null and NetworkManager.is_multiplayer_active():
 		if not NetworkManager.quota_votes_updated.is_connected(_refresh_vote_ui):
@@ -502,6 +503,7 @@ func _build_standard_papers() -> void:
 			btn_path, btn_txt, 14, Color(0.20, 0.12, 0.05) if is_sel else UIAssets.COL_CREAM, "", "black", 5
 		)
 		pilih_btn.position = Vector2(12, 358)
+		pilih_btn.set_meta("suppress_default_click_sfx", true)
 		pilih_btn.pressed.connect(_on_contract_selected.bind(i))
 		card.add_child(pilih_btn)
 		_pilih_buttons.append(pilih_btn)
@@ -720,6 +722,7 @@ func _build_bottom_bar() -> void:
 		btn_tex, btn_title, 15, COL_WHITE if is_boss_day else Color(0.20, 0.12, 0.05), "", "black", 5
 	)
 	_start_shift_btn.position = Vector2(950, 638)
+	_start_shift_btn.set_meta("suppress_default_click_sfx", true)
 	_start_shift_btn.pressed.connect(_on_start_shift_confirmed)
 	_content.add_child(_start_shift_btn)
 
@@ -771,6 +774,7 @@ func _refresh_top_bar() -> void:
 func _on_contract_selected(idx: int) -> void:
 	if idx < 0 or idx >= _contracts_data.size():
 		return
+	UIAssets.play_sfx("stamp", 0.05)
 	_selected_index = idx
 	_update_contract_selection_visuals()
 	emit_signal("contract_selected", _contracts_data[_selected_index])
@@ -829,6 +833,7 @@ func _update_contract_selection_visuals() -> void:
 
 
 func _on_start_shift_confirmed() -> void:
+	UIAssets.play_sfx("confirm", 0.03)
 	if NetworkManager != null and NetworkManager.is_multiplayer_active():
 		if NetworkManager.is_host():
 			NetworkManager.resolve_and_start_quota_vote()

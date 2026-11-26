@@ -1,0 +1,8 @@
+UI Sound Effects — Kenney (https://kenney.nl)
+Packs used:
+- Interface Sounds (v1.0, created 11-02-2020): error_006.wav, confirmation_002.wav
+- UI Audio (v1.0): rollover2.wav, click3.wav
+- RPG Audio (v1.0): handle_coins.ogg, book_flip_2.ogg, book_place_2.ogg, book_open.ogg, book_close.ogg
+
+License: Creative Commons Zero (CC0 1.0 Universal — Public Domain)
+https://creativecommons.org/publicdomain/zero/1.0/

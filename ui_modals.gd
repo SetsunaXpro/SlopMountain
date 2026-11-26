@@ -128,6 +128,7 @@ class PauseMenuOverlay extends CanvasLayer:
 		_build_ui()
 		_refresh_status()
 		UIAssets.sync_bgm()
+		UIAssets.play_sfx("open", 0.03)
 
 	func _exit_tree() -> void:
 		if _did_pause_tree and get_tree():
@@ -307,6 +308,7 @@ class HowToPlayOverlay extends CanvasLayer:
 		layer = 110
 		process_mode = Node.PROCESS_MODE_ALWAYS
 		_build_ui()
+		UIAssets.play_sfx("open", 0.03)
 
 	func _exit_tree() -> void:
 		closed.emit()
@@ -454,6 +456,7 @@ class SettingsOverlay extends CanvasLayer:
 		process_mode = Node.PROCESS_MODE_ALWAYS
 		UIAssets.load_and_apply_settings()
 		_build_ui()
+		UIAssets.play_sfx("open", 0.03)
 
 	func _exit_tree() -> void:
 		UIAssets.save_settings()
@@ -560,7 +563,9 @@ class SettingsOverlay extends CanvasLayer:
 			"SIMPAN & TUTUP", 15, Color(0.20, 0.12, 0.05), "", "black", 5
 		)
 		btn_save.position = Vector2(480, 444)
+		btn_save.set_meta("suppress_default_click_sfx", true)
 		btn_save.pressed.connect(func():
+			UIAssets.play_sfx("confirm", 0.03)
 			UIAssets.save_settings()
 			queue_free()
 		)
@@ -622,6 +627,10 @@ class SettingsOverlay extends CanvasLayer:
 			pct_lbl.text = "%d%%" % int(round(new_val * 100.0))
 			UIAssets.apply_settings()
 		)
+		slider.drag_ended.connect(func(_changed: bool):
+			if key == "sfx_vol" or key == "master_vol":
+				UIAssets.play_sfx("click", 0.02)
+		)
 		paper.add_child(slider)
 		_slider_refs[key] = {"slider": slider, "fill": fill_bar, "pct": pct_lbl}
 
@@ -682,6 +691,7 @@ class CreditsOverlay extends CanvasLayer:
 		layer = 110
 		process_mode = Node.PROCESS_MODE_ALWAYS
 		_build_ui()
+		UIAssets.play_sfx("open", 0.03)
 
 	func _exit_tree() -> void:
 		closed.emit()
@@ -757,11 +767,19 @@ class CreditsOverlay extends CanvasLayer:
 			r_lbl.size = Vector2(284, 20)
 			card.add_child(r_lbl)
 
+		var sfx_credit := UIAssets.create_label(
+			"UI SFX: Kenney (kenney.nl — CC0)   •   Font: Rubik (Google Fonts)", 11, Color(0.32, 0.25, 0.18), "semibold",
+			HORIZONTAL_ALIGNMENT_CENTER
+		)
+		sfx_credit.position = Vector2(36, 314)
+		sfx_credit.size = Vector2(628, 18)
+		paper.add_child(sfx_credit)
+
 		var tech := UIAssets.create_label(
 			"Gimersia Inspire 2026 — Universitas Nusa Mandiri", 12, UIAssets.COL_INK_MUTED, "semibold",
 			HORIZONTAL_ALIGNMENT_CENTER
 		)
-		tech.position = Vector2(36, 326)
+		tech.position = Vector2(36, 336)
 		tech.size = Vector2(628, 22)
 		paper.add_child(tech)
 
@@ -770,5 +788,9 @@ class CreditsOverlay extends CanvasLayer:
 			"TUTUP", 16, UIAssets.COL_CREAM, "", "black", 5
 		)
 		btn_close.position = Vector2(500, 444)
-		btn_close.pressed.connect(queue_free)
+		btn_close.set_meta("suppress_default_click_sfx", true)
+		btn_close.pressed.connect(func():
+			UIAssets.play_sfx("close", 0.03)
+			queue_free()
+		)
 		board.add_child(btn_close)

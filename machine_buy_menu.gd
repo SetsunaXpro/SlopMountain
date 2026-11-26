@@ -126,6 +126,7 @@ func _ready() -> void:
 	if hud:
 		hud.visible = false
 	UIAssets.sync_bgm()
+	UIAssets.play_sfx("open", 0.03)
 
 
 func _exit_tree() -> void:
@@ -549,8 +550,10 @@ func _on_buy_machine_pressed(machine: Dictionary) -> void:
 	var cost: int = int(machine.get("cost", 0))
 
 	if _player.slop_credit < cost:
+		UIAssets.play_sfx("error", 0.02)
 		return
 
+	UIAssets.play_sfx("buy", 0.05)
 	_player.slop_credit -= cost
 	if _player.has_signal("slop_credit_changed"):
 		_player.slop_credit_changed.emit(_player.slop_credit, -float(cost))
