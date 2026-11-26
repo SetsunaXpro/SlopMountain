@@ -108,6 +108,14 @@ static func get_card_art(item_id: String) -> Texture2D:
 	return null
 
 
+## Checks for a transparent sprite icon cutout for the compact HUD Equipped Rail
+static func get_perk_icon(item_id: String) -> Texture2D:
+	var icon_tex := get_tex("res://UI/03_cards/art/%s_icon.png" % item_id)
+	if icon_tex != null:
+		return icon_tex
+	return get_card_art(item_id)
+
+
 # ---------------------------------------------------------------------------
 # Control Builders
 # ---------------------------------------------------------------------------

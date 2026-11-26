@@ -946,9 +946,10 @@ class PerkSlotWidget extends Control:
 			_fill_panel.add_theme_stylebox_override("panel", sb)
 			_fill_panel.visible = true
 
-			var custom_art := UIAssets.get_card_art(perk_id)
+			var custom_art := UIAssets.get_perk_icon(perk_id)
 			if custom_art != null and is_instance_valid(_art_rect):
 				_art_rect.texture = custom_art
+				_art_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 				_art_rect.visible = true
 				if is_instance_valid(_icon_label):
 					_icon_label.visible = false

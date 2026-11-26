@@ -312,10 +312,10 @@ func _build_single_card(index: int, perk: Dictionary, pos_x: float) -> void:
 	cost_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	price_plate.add_child(cost_lbl)
 
-	# 4. Blueprint Window Art (Fits directly inside card's baked blueprint cutout)
+	# 4. Card Pixel-Art Window (186x115 exact fit inside card's baked artwork slot)
 	var art_slot := Control.new()
 	art_slot.position = Vector2(22, 46)
-	art_slot.size = Vector2(186, 114)
+	art_slot.size = Vector2(186, 115)
 	art_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card_base.add_child(art_slot)
 
@@ -325,7 +325,8 @@ func _build_single_card(index: int, perk: Dictionary, pos_x: float) -> void:
 		art_tr.texture = custom_art
 		art_tr.set_anchors_preset(Control.PRESET_FULL_RECT)
 		art_tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		art_tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		art_tr.stretch_mode = TextureRect.STRETCH_SCALE
+		art_tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		art_tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		art_slot.add_child(art_tr)
 	else:
