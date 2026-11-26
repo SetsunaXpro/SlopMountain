@@ -63,6 +63,7 @@ var _orig_sky_energy: float = 1.0
 
 # UI References
 var _canvas: CanvasLayer = null
+var _corner_canvas: CanvasLayer = null
 var _fade_canvas: CanvasLayer = null
 var _hud_card: PanelContainer = null
 var _hud_day_label: Label = null
@@ -71,6 +72,7 @@ var _hud_remaining_label: Label = null
 var _hud_quota_label: Label = null
 var _hud_day_progress: ProgressBar = null
 var _hud_corner_next_btn: Button = null
+var _can_advance_night: bool = false
 
 var _night_modal: Control = null
 var _win_root: Control = null
@@ -197,14 +199,53 @@ func get_daily_progress_amount() -> float:
 	return 0.0
 
 
+func _has_active_menu_in_group(group_name: String) -> bool:
+	for n in get_tree().get_nodes_in_group(group_name):
+		if is_instance_valid(n) and not n.is_queued_for_deletion() and n.is_inside_tree():
+			if "visible" in n and not n.visible:
+				continue
+			return true
+	return false
+
+
+func _is_any_menu_blocking_corner_btn() -> bool:
+	if _night_modal != null and _night_modal.visible:
+		return true
+	if is_instance_valid(quota_menu) and not quota_menu.is_queued_for_deletion() and quota_menu.is_inside_tree() and quota_menu.visible:
+		return true
+	for grp in ["title_screen", "buy_menu", "machine_buy_menu", "quota_menu", "pause_menu", "ui_modal_popup"]:
+		if _has_active_menu_in_group(grp):
+			return true
+	return false
+
+
+func _sync_corner_next_btn() -> void:
+	if not is_instance_valid(_hud_corner_next_btn):
+		return
+	var show_corner: bool = is_night and _can_advance_night and not is_waiting_for_day_start and not _is_any_menu_blocking_corner_btn()
+	if _hud_corner_next_btn.visible != show_corner:
+		_hud_corner_next_btn.visible = show_corner
+
+
+func _capture_player_mouse() -> void:
+	var player := get_tree().get_first_node_in_group("player")
+	if player and player.has_method("capture_mouse"):
+		player.capture_mouse()
+	else:
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+
+
 func _process(delta: float) -> void:
+	_sync_corner_next_btn()
+
 	if is_waiting_for_day_start:
 		var has_menu := false
 		if is_instance_valid(quota_menu) and not quota_menu.is_queued_for_deletion() and quota_menu.is_inside_tree() and quota_menu.visible:
 			has_menu = true
-		var title = get_tree().get_first_node_in_group("title_screen")
-		if title and is_instance_valid(title) and not title.is_queued_for_deletion() and title.is_inside_tree() and title.visible:
-			has_menu = true
+		for grp in ["title_screen", "quota_menu", "buy_menu", "machine_buy_menu"]:
+			if _has_active_menu_in_group(grp):
+				has_menu = true
+				break
 
 		if has_menu:
 			_apply_lighting(0.0)
@@ -426,8 +467,8 @@ func _populate_win_screen(items_today: int, sc_today: float, collected: float, t
 		_night_retry_btn.visible = false
 	if is_instance_valid(_night_pay_btn):
 		_night_pay_btn.visible = false
-	if is_instance_valid(_hud_corner_next_btn):
-		_hud_corner_next_btn.visible = true
+	_can_advance_night = true
+	_sync_corner_next_btn()
 
 
 func _populate_lose_screen(items_today: int, sc_today: float, collected: float, target: float, total_sc: float) -> void:
@@ -468,8 +509,8 @@ func _populate_lose_screen(items_today: int, sc_today: float, collected: float, 
 			_night_pay_btn.visible = true
 		else:
 			_night_pay_btn.visible = false
-	if is_instance_valid(_hud_corner_next_btn):
-		_hud_corner_next_btn.visible = false
+	_can_advance_night = false
+	_sync_corner_next_btn()
 
 
 ## Preview helpers for visual verification in Godot
@@ -551,8 +592,10 @@ func pay_shortfall_and_advance() -> void:
 func _go_to_main_menu() -> void:
 	if NetworkManager != null and NetworkManager.is_multiplayer_active():
 		NetworkManager.leave_game()
+	_can_advance_night = false
 	_hide_night_modal()
 	is_waiting_for_day_start = true
+	_sync_corner_next_btn()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	var existing_title = get_tree().get_first_node_in_group("title_screen")
 	if not existing_title and get_tree().current_scene:
@@ -566,6 +609,7 @@ func _on_fade_black_complete() -> void:
 	current_day += 1
 	day_elapsed_seconds = 0.0
 	is_night = false
+	_can_advance_night = false
 	_quota_toast_triggered = false
 	custom_day_quota = -1.0
 
@@ -577,8 +621,7 @@ func _on_fade_black_complete() -> void:
 		player.on_new_day_started()
 
 	_hide_night_modal()
-	if _hud_corner_next_btn:
-		_hud_corner_next_btn.visible = false
+	_sync_corner_next_btn()
 
 	_apply_lighting(0.0)
 	call_deferred("open_quota_selection")
@@ -587,6 +630,7 @@ func _on_fade_black_complete() -> void:
 func _on_fade_retry_complete() -> void:
 	day_elapsed_seconds = 0.0
 	is_night = false
+	_can_advance_night = false
 	_quota_toast_triggered = false
 
 	if event_system:
@@ -597,8 +641,7 @@ func _on_fade_retry_complete() -> void:
 		player.on_day_retried()
 
 	_hide_night_modal()
-	if _hud_corner_next_btn:
-		_hud_corner_next_btn.visible = false
+	_sync_corner_next_btn()
 
 	_apply_lighting(0.0)
 	call_deferred("open_quota_selection")
@@ -635,13 +678,11 @@ func _on_quota_selection_confirmed(contract_data: Dictionary) -> void:
 ## Fixed: Never recapture cursor while Contract Board / Night Ending is active!
 func _on_fade_in_complete() -> void:
 	_fade_rect.visible = false
-	var menu_open := is_waiting_for_day_start \
-		or (is_instance_valid(quota_menu) and not quota_menu.is_queued_for_deletion()) \
-		or (_night_modal != null and _night_modal.visible)
+	var menu_open := is_waiting_for_day_start or _is_any_menu_blocking_corner_btn()
 	if menu_open:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	else:
-		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+		_capture_player_mouse()
 
 
 func _show_night_modal(animate: bool = true) -> void:
@@ -656,14 +697,16 @@ func _show_night_modal(animate: bool = true) -> void:
 			tw.tween_property(_night_modal, "modulate:a", 1.0, 0.35)
 		else:
 			_night_modal.modulate.a = 1.0
+	_sync_corner_next_btn()
 	UIAssets.sync_bgm()
 
 
 func _hide_night_modal() -> void:
 	if _night_modal:
 		_night_modal.visible = false
+	_sync_corner_next_btn()
 	var hud = get_tree().get_first_node_in_group("game_hud")
-	if hud and not is_waiting_for_day_start:
+	if hud and not is_waiting_for_day_start and not _is_any_menu_blocking_corner_btn():
 		hud.visible = true
 	UIAssets.sync_bgm()
 
@@ -675,16 +718,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			var target := get_current_quota()
 			var quota_passed: bool = (not quota_enabled) or (collected >= target)
 
-			if quota_passed:
-				if event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
+			if event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
+				get_viewport().set_input_as_handled()
+				if quota_passed:
 					advance_to_next_day()
-			else:
-				if event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
+				else:
 					retry_current_day()
+				return
 
 			if event.keycode == KEY_ESCAPE or event.keycode == KEY_TAB:
+				get_viewport().set_input_as_handled()
 				_hide_night_modal()
-				Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+				_capture_player_mouse()
+				return
 
 
 # ===========================================================================
@@ -722,20 +768,33 @@ func _setup_ui() -> void:
 	vbox.add_child(_hud_day_progress)
 	vbox.add_child(_hud_quota_label)
 
-	# Corner persistent Next Day button (visible at night if player explores in dark)
+	# Dedicated HUD-tier layer (layer 12, strictly BELOW shops/menus layer 20+) for Night Explore button
+	_corner_canvas = CanvasLayer.new()
+	_corner_canvas.name = "NightCornerHUDLayer"
+	_corner_canvas.layer = 12
+	add_child(_corner_canvas)
+
+	var corner_root := Control.new()
+	corner_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	corner_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_corner_canvas.add_child(corner_root)
+
+	# Corner persistent Next Day button (visible ONLY during free-roam night exploration when all menus are closed)
 	_hud_corner_next_btn = UIAssets.create_wood_button(
 		"res://UI/05_modals/btn_modal_blue_wood.png",
 		"LANJUT HARI  ➔", 13, Color(0.20, 0.12, 0.05), "", "black", 4
 	)
+	_hud_corner_next_btn.focus_mode = Control.FOCUS_NONE
 	_hud_corner_next_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_hud_corner_next_btn.offset_left = -224
-	_hud_corner_next_btn.offset_right = -18
-	_hud_corner_next_btn.offset_top = 194
-	_hud_corner_next_btn.offset_bottom = 250
-	_hud_corner_next_btn.custom_minimum_size = Vector2(206, 56)
+	_hud_corner_next_btn.offset_left = -242
+	_hud_corner_next_btn.offset_right = -22
+	_hud_corner_next_btn.offset_top = 196
+	_hud_corner_next_btn.offset_bottom = 260
+	_hud_corner_next_btn.custom_minimum_size = Vector2(220, 64)
+	_hud_corner_next_btn.size = Vector2(220, 64)
 	_hud_corner_next_btn.visible = false
 	_hud_corner_next_btn.pressed.connect(Callable(self, "advance_to_next_day"))
-	root.add_child(_hud_corner_next_btn)
+	corner_root.add_child(_hud_corner_next_btn)
 
 	# 2. Full-Screen Night Settlement / Win & Game Over Screens (1280 x 720, Figma 05_modals)
 	_night_modal = Control.new()
@@ -931,8 +990,9 @@ func _setup_ui() -> void:
 	_lose_deficit_label.size = Vector2(250, 16)
 	def_bg.add_child(_lose_deficit_label)
 
+	# Exact inner crimson cutout of quota_deficit_bar_bg.png: x=19..496 (w=478), y=35..50 (h=16); 476x14 centered at (20, 36)
 	_lose_deficit_bar = TextureProgressBar.new()
-	_lose_deficit_bar.position = Vector2(20, 34)
+	_lose_deficit_bar.position = Vector2(20, 36)
 	_lose_deficit_bar.size = Vector2(476, 14)
 	_lose_deficit_bar.min_value = 0.0
 	_lose_deficit_bar.max_value = 100.0
@@ -1001,7 +1061,7 @@ func _setup_ui() -> void:
 
 func _on_explore_night_pressed() -> void:
 	_hide_night_modal()
-	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	_capture_player_mouse()
 
 
 func _update_hud(progress: float) -> void:

@@ -88,9 +88,17 @@ func _exit_tree() -> void:
 			NetworkManager.quota_votes_updated.disconnect(_refresh_vote_ui)
 		if NetworkManager.quota_vote_finalized.is_connected(_on_coop_vote_finalized):
 			NetworkManager.quota_vote_finalized.disconnect(_on_coop_vote_finalized)
-	var hud = get_tree().get_first_node_in_group("game_hud")
-	if hud:
-		hud.visible = true
+	var tree := get_tree()
+	if tree:
+		var any_other := false
+		for grp in ["title_screen", "buy_menu", "machine_buy_menu", "quota_menu", "pause_menu", "ui_modal_popup"]:
+			for n in tree.get_nodes_in_group(grp):
+				if n != self and is_instance_valid(n) and not n.is_queued_for_deletion():
+					any_other = true
+					break
+		var hud = tree.get_first_node_in_group("game_hud")
+		if hud and not any_other:
+			hud.visible = true
 
 
 func _resolve_references() -> void:
@@ -437,10 +445,12 @@ func _build_standard_papers() -> void:
 		card.add_child(subtag_lbl)
 		_subtag_labels.append(subtag_lbl)
 
-		# 3. Big Quota Target & Shift Duration (Colored ink per tier matching Figma)
+		# 3. Big Quota Target & Shift Duration (Matches live DayNightCycle quota unit: SC or KG)
 		var quota_cols := [COL_DARK_TEXT, Color(0.055, 0.302, 0.478), Color(0.561, 0.106, 0.078)]
+		var use_sc := (_dnc == null) or (not ("quota_type" in _dnc)) or (_dnc.quota_type == DayNightCycle.QuotaType.SLOP_CREDIT)
+		var quota_txt := ("$%.0f SC" % float(data["quota_target"])) if use_sc else ("%.0f KG" % float(data["quota_target"]))
 		var quota_lbl := UIAssets.create_label(
-			"%.0f KG" % float(data["quota_target"]), 32, quota_cols[mini(i, 2)], "black"
+			quota_txt, 32, quota_cols[mini(i, 2)], "black"
 		)
 		quota_lbl.position = Vector2(28, 86)
 		quota_lbl.size = Vector2(204, 44)
@@ -893,6 +903,9 @@ func _finalize_shift_start() -> void:
 	var tw := create_tween()
 	tw.tween_property(_root, "modulate:a", 0.0, 0.22)
 	tw.tween_callback(func():
-		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+		if _player != null and _player.has_method("capture_mouse"):
+			_player.capture_mouse()
+		else:
+			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 		queue_free()
 	)

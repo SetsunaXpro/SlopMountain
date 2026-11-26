@@ -130,9 +130,17 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
-	var hud = get_tree().get_first_node_in_group("game_hud")
-	if hud:
-		hud.visible = true
+	var tree := get_tree()
+	if tree:
+		var any_other := false
+		for grp in ["title_screen", "buy_menu", "machine_buy_menu", "quota_menu", "pause_menu", "ui_modal_popup"]:
+			for n in tree.get_nodes_in_group(grp):
+				if n != self and is_instance_valid(n) and not n.is_queued_for_deletion():
+					any_other = true
+					break
+		var hud = tree.get_first_node_in_group("game_hud")
+		if hud and not any_other:
+			hud.visible = true
 	UIAssets.sync_bgm()
 
 
@@ -309,7 +317,7 @@ func _build_ui() -> void:
 	# 6. Bottom Action Bar
 	_mod_shop_btn = UIAssets.create_wood_button(
 		"res://UI/02_shop/btn_contract_brown_wood.png",
-		"🎒  MOD SHOP [B]",
+		"MOD SHOP  [B]",
 		14,
 		UIAssets.COL_CREAM,
 		"",
@@ -525,6 +533,7 @@ func _build_card(machine: Dictionary, pos_x: float, pos_y: float = 12.0) -> void
 	)
 	buy_btn.position = Vector2(pos_x + 4.0, pos_y + 382.0)
 	buy_btn.disabled = owned or (not can_buy)
+	buy_btn.set_meta("suppress_default_click_sfx", true)
 	if not owned and can_buy:
 		buy_btn.pressed.connect(_on_buy_machine_pressed.bind(machine))
 
@@ -650,14 +659,25 @@ func _refresh_header() -> void:
 			day_idx = clampi(_dnc.current_day - 1, 0, MOSSY_MACHINERY_LINES.size() - 1)
 		_dlg_label.text = "Mossy: " + MOSSY_MACHINERY_LINES[day_idx]
 
+	if is_instance_valid(_close_btn):
+		if _dnc != null and _dnc.is_waiting_for_day_start:
+			_close_btn.text = "START DAY  ➔"
+		elif _dnc != null and _dnc.is_night:
+			_close_btn.text = "CLOSE SHOP  ➔"
+		else:
+			_close_btn.text = "RESUME SHIFT  ➔"
+
 
 func _on_mod_shop_pressed() -> void:
 	if _player and _player.has_method("toggle_buy_menu"):
 		_player.toggle_buy_menu()
-	queue_free()
+	if not is_queued_for_deletion():
+		queue_free()
 
 
 func _on_close_pressed() -> void:
+	if _dnc != null:
+		_dnc.is_waiting_for_day_start = false
 	day_started.emit()
 	closed.emit()
 	if _player and _player.has_method("capture_mouse"):

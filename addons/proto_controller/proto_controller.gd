@@ -341,16 +341,28 @@ func _ready() -> void:
 func _input(event: InputEvent) -> void:
 	if not _is_local_player():
 		return
+	var menu_open := is_any_menu_open()
+	if not menu_open and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED:
+		mouse_captured = true
 	# Smooth camera look in _input so moving/clicking never stalls rotation
-	if mouse_captured and event is InputEventMouseMotion and not is_any_menu_open():
+	if mouse_captured and event is InputEventMouseMotion and not menu_open:
 		rotate_look(event.relative)
 
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not _is_local_player():
 		return
-	# Mouse controls
+	var focus_owner := get_viewport().gui_get_focus_owner()
+	if focus_owner is LineEdit or focus_owner is TextEdit:
+		return
+
+	var blocking_overlay := _is_blocking_overlay_open()
+	var shop_or_contract_open := _is_shop_or_contract_open()
+
+	# Mouse controls (blocked whenever any menu/overlay is open)
 	if event is InputEventMouseButton and event.pressed:
+		if blocking_overlay or shop_or_contract_open:
+			return
 		# Build mode interactions take precedence
 		if is_building:
 			if event.button_index == MOUSE_BUTTON_LEFT:
@@ -400,59 +412,78 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# Key controls
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_1 or event.keycode == KEY_KP_1:
-			_select_hotbar_slot(0)
-		elif event.keycode == KEY_2 or event.keycode == KEY_KP_2:
-			_select_hotbar_slot(1)
-		elif event.keycode == KEY_3 or event.keycode == KEY_KP_3:
-			_select_hotbar_slot(2)
-		elif event.keycode == KEY_4 or event.keycode == KEY_KP_4:
-			_select_hotbar_slot(3)
-		elif event.keycode == KEY_5 or event.keycode == KEY_KP_5:
-			_select_hotbar_slot(4)
-		elif event.keycode == KEY_6 or event.keycode == KEY_KP_6:
-			_select_hotbar_slot(5)
-		elif event.keycode == KEY_C:
-			toggle_build_mode()
-		elif event.keycode == KEY_R and is_building:
-			build_rotation_deg += deg_to_rad(45.0)
-		elif event.keycode == KEY_G:
-			toggle_equip_trash_grenade()
-		elif event.keycode == KEY_B:
-			toggle_buy_menu()
-		elif event.keycode == KEY_M:
-			toggle_machine_menu()
-		elif event.keycode == KEY_Q:
-			toggle_quota_menu()
-		elif event.keycode == KEY_N:
-			var dnc = get_tree().get_first_node_in_group("day_night_cycle")
-			if dnc and not dnc.is_night and not dnc.is_waiting_for_day_start:
-				_show_feedback("🌅 Hold [N] to End Day Early")
+		if not blocking_overlay:
+			if event.keycode == KEY_B:
+				toggle_buy_menu()
+				get_viewport().set_input_as_handled()
+				return
+			elif event.keycode == KEY_M:
+				toggle_machine_menu()
+				get_viewport().set_input_as_handled()
+				return
+			elif event.keycode == KEY_Q:
+				toggle_quota_menu()
+				get_viewport().set_input_as_handled()
+				return
 
-	if InputMap.has_action(input_equip_trash) and event.is_action_pressed(input_equip_trash):
+		if not blocking_overlay and not shop_or_contract_open:
+			if event.keycode == KEY_1 or event.keycode == KEY_KP_1:
+				_select_hotbar_slot(0)
+			elif event.keycode == KEY_2 or event.keycode == KEY_KP_2:
+				_select_hotbar_slot(1)
+			elif event.keycode == KEY_3 or event.keycode == KEY_KP_3:
+				_select_hotbar_slot(2)
+			elif event.keycode == KEY_4 or event.keycode == KEY_KP_4:
+				_select_hotbar_slot(3)
+			elif event.keycode == KEY_5 or event.keycode == KEY_KP_5:
+				_select_hotbar_slot(4)
+			elif event.keycode == KEY_6 or event.keycode == KEY_KP_6:
+				_select_hotbar_slot(5)
+			elif event.keycode == KEY_C:
+				toggle_build_mode()
+			elif event.keycode == KEY_R and is_building:
+				build_rotation_deg += deg_to_rad(45.0)
+			elif event.keycode == KEY_G:
+				toggle_equip_trash_grenade()
+			elif event.keycode == KEY_N:
+				var dnc = get_tree().get_first_node_in_group("day_night_cycle")
+				if dnc and not dnc.is_night and not dnc.is_waiting_for_day_start:
+					_show_feedback("🌅 Hold [N] to End Day Early")
+
+	if not blocking_overlay and not shop_or_contract_open and InputMap.has_action(input_equip_trash) and event.is_action_pressed(input_equip_trash):
 		toggle_equip_trash_grenade()
 
-	# Escape releases mouse, cancels build mode, or toggles pause menu
+	# Escape releases mouse, cancels build mode, closes shops, or toggles pause menu
 	if event.is_action_pressed("ui_cancel"):
 		if is_building:
 			cancel_build_mode()
 			get_viewport().set_input_as_handled()
 			return
-		elif is_instance_valid(buy_menu):
+		elif is_instance_valid(buy_menu) and not buy_menu.is_queued_for_deletion():
 			toggle_buy_menu()
-		elif is_instance_valid(machine_menu):
+			get_viewport().set_input_as_handled()
+			return
+		elif is_instance_valid(machine_menu) and not machine_menu.is_queued_for_deletion():
 			toggle_machine_menu()
-		elif is_instance_valid(quota_menu_instance):
+			get_viewport().set_input_as_handled()
+			return
+		elif is_instance_valid(quota_menu_instance) and not quota_menu_instance.is_queued_for_deletion():
 			toggle_quota_menu()
-		elif is_instance_valid(pause_menu):
+			get_viewport().set_input_as_handled()
+			return
+		elif is_instance_valid(pause_menu) and not pause_menu.is_queued_for_deletion():
 			toggle_pause_menu()
+			get_viewport().set_input_as_handled()
+			return
 		elif not is_any_menu_open():
 			toggle_pause_menu()
+			get_viewport().set_input_as_handled()
+			return
 		else:
 			release_mouse()
 
-	# Toggle freefly mode
-	if can_freefly and Input.is_action_just_pressed(input_freefly):
+	# Toggle freefly mode (only during active gameplay)
+	if not blocking_overlay and not shop_or_contract_open and can_freefly and Input.is_action_just_pressed(input_freefly):
 		if not freeflying:
 			enable_freefly()
 		else:
@@ -462,9 +493,15 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	if not _is_local_player():
 		return
-	if is_building:
+	var menu_open := is_any_menu_open()
+	if is_instance_valid(_hud_layer):
+		var want_hud := not menu_open
+		if _hud_layer.visible != want_hud:
+			_hud_layer.visible = want_hud
+	if is_building and not menu_open:
 		_update_build_preview(delta)
-	_update_compass_hud()
+	if not menu_open:
+		_update_compass_hud()
 
 
 func _physics_process(delta: float) -> void:
@@ -473,6 +510,21 @@ func _physics_process(delta: float) -> void:
 		global_position = global_position.lerp(_net_pos, t)
 		rotation.y = lerp_angle(rotation.y, _net_rot_y, t)
 		head.rotation.x = lerp_angle(head.rotation.x, _net_head_x, t)
+		return
+
+	if is_any_menu_open():
+		if _pickup_hold_timer > 0.0:
+			_reset_pickup_hold()
+		if _end_day_hold_timer > 0.0:
+			_end_day_hold_timer = 0.0
+			_hide_action_bar()
+		if is_instance_valid(_hud_prompt_label):
+			_hud_prompt_label.visible = false
+		if has_gravity and not is_on_floor():
+			velocity += get_gravity() * delta
+		velocity.x = 0.0
+		velocity.z = 0.0
+		move_and_slide()
 		return
 
 	update_held_object()
@@ -1030,14 +1082,16 @@ func _setup_hud() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_layer.add_child(root)
 
-	# 1. Center Crosshair
+	# 1. Center Crosshair (explicit center offsets so window resizing stays dead-center)
 	var crosshair := Label.new()
 	crosshair.text = "+"
 	crosshair.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	crosshair.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	crosshair.set_anchors_preset(Control.PRESET_CENTER)
-	crosshair.position = Vector2(-15, -15)
-	crosshair.size = Vector2(30, 30)
+	crosshair.offset_left = -15
+	crosshair.offset_right = 15
+	crosshair.offset_top = -15
+	crosshair.offset_bottom = 15
 	crosshair.add_theme_color_override("font_color", Color(1.0, 1.0, 1.0, 0.75))
 	crosshair.add_theme_font_size_override("font_size", 22)
 	crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1046,8 +1100,10 @@ func _setup_hud() -> void:
 	# 2. Action / Cooldown Bar (under crosshair, Minecraft-style)
 	_action_bar = ProgressBar.new()
 	_action_bar.set_anchors_preset(Control.PRESET_CENTER)
-	_action_bar.position = Vector2(-22, 18)
-	_action_bar.size = Vector2(44, 6)
+	_action_bar.offset_left = -22
+	_action_bar.offset_right = 22
+	_action_bar.offset_top = 18
+	_action_bar.offset_bottom = 24
 	_action_bar.show_percentage = false
 	_action_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_action_bar.min_value = 0.0
@@ -1078,8 +1134,10 @@ func _setup_hud() -> void:
 	# 3. Aim Interaction Prompt
 	_hud_prompt_label = Label.new()
 	_hud_prompt_label.set_anchors_preset(Control.PRESET_CENTER)
-	_hud_prompt_label.position = Vector2(-200, 30)
-	_hud_prompt_label.size = Vector2(400, 30)
+	_hud_prompt_label.offset_left = -220
+	_hud_prompt_label.offset_right = 220
+	_hud_prompt_label.offset_top = 30
+	_hud_prompt_label.offset_bottom = 60
 	_hud_prompt_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hud_prompt_label.add_theme_color_override("font_color", Color(0.35, 1.0, 0.55, 0.95))
 	_hud_prompt_label.add_theme_font_size_override("font_size", 15)
@@ -1090,8 +1148,10 @@ func _setup_hud() -> void:
 	# 4. Toast notification for collected / hauled items
 	_hud_toast_label = Label.new()
 	_hud_toast_label.set_anchors_preset(Control.PRESET_CENTER)
-	_hud_toast_label.position = Vector2(-200, -60)
-	_hud_toast_label.size = Vector2(400, 30)
+	_hud_toast_label.offset_left = -220
+	_hud_toast_label.offset_right = 220
+	_hud_toast_label.offset_top = -62
+	_hud_toast_label.offset_bottom = -32
 	_hud_toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hud_toast_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.25, 1.0))
 	_hud_toast_label.add_theme_font_size_override("font_size", 18)
@@ -1307,24 +1367,36 @@ func _ensure_day_night_cycle() -> void:
 # Buy Menus (Items & Machines)
 # ===========================================================================
 
+## Helper to close any active morning/manual QuotaMenu without leaving duplicates stacked
+func _close_all_quota_menus() -> void:
+	if is_instance_valid(quota_menu_instance) and not quota_menu_instance.is_queued_for_deletion():
+		quota_menu_instance.queue_free()
+	quota_menu_instance = null
+	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
+	if dnc and "quota_menu" in dnc and is_instance_valid(dnc.quota_menu) and not dnc.quota_menu.is_queued_for_deletion():
+		dnc.quota_menu.queue_free()
+		dnc.quota_menu = null
+
+
 ## Toggle the buy shop open / closed (B key)
 func toggle_buy_menu() -> void:
 	if is_building:
 		cancel_build_mode()
-	if is_instance_valid(buy_menu):
+	if is_instance_valid(buy_menu) and not buy_menu.is_queued_for_deletion():
 		# Already open — close it
 		buy_menu.queue_free()
 		buy_menu = null
+		var dnc_close = get_tree().get_first_node_in_group("day_night_cycle")
+		if dnc_close and dnc_close.is_waiting_for_day_start:
+			dnc_close.is_waiting_for_day_start = false
 		capture_mouse()
 		return
 
 	# Close any other open menus first
-	if is_instance_valid(machine_menu):
+	if is_instance_valid(machine_menu) and not machine_menu.is_queued_for_deletion():
 		machine_menu.queue_free()
 		machine_menu = null
-	if is_instance_valid(quota_menu_instance):
-		quota_menu_instance.queue_free()
-		quota_menu_instance = null
+	_close_all_quota_menus()
 
 	# Open the menu
 	var menu := BuyMenu.new()
@@ -1341,19 +1413,20 @@ func toggle_buy_menu() -> void:
 func toggle_machine_menu() -> void:
 	if is_building:
 		cancel_build_mode()
-	if is_instance_valid(machine_menu):
+	if is_instance_valid(machine_menu) and not machine_menu.is_queued_for_deletion():
 		machine_menu.queue_free()
 		machine_menu = null
+		var dnc_close = get_tree().get_first_node_in_group("day_night_cycle")
+		if dnc_close and dnc_close.is_waiting_for_day_start:
+			dnc_close.is_waiting_for_day_start = false
 		capture_mouse()
 		return
 
 	# Close any other open menus first
-	if is_instance_valid(buy_menu):
+	if is_instance_valid(buy_menu) and not buy_menu.is_queued_for_deletion():
 		buy_menu.queue_free()
 		buy_menu = null
-	if is_instance_valid(quota_menu_instance):
-		quota_menu_instance.queue_free()
-		quota_menu_instance = null
+	_close_all_quota_menus()
 
 	var mm_script = load("res://machine_buy_menu.gd")
 	if mm_script:
@@ -1375,17 +1448,21 @@ func _on_buy_menu_day_started() -> void:
 func toggle_quota_menu() -> void:
 	if is_building:
 		cancel_build_mode()
-	if is_instance_valid(quota_menu_instance):
+	# If the mandatory morning Contract Board from DayNightCycle is already open, do not stack a duplicate
+	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
+	if dnc and "quota_menu" in dnc and is_instance_valid(dnc.quota_menu) and not dnc.quota_menu.is_queued_for_deletion() and dnc.quota_menu.visible:
+		return
+	if is_instance_valid(quota_menu_instance) and not quota_menu_instance.is_queued_for_deletion():
 		quota_menu_instance.queue_free()
 		quota_menu_instance = null
 		capture_mouse()
 		return
 
 	# Close other menus first
-	if is_instance_valid(buy_menu):
+	if is_instance_valid(buy_menu) and not buy_menu.is_queued_for_deletion():
 		buy_menu.queue_free()
 		buy_menu = null
-	if is_instance_valid(machine_menu):
+	if is_instance_valid(machine_menu) and not machine_menu.is_queued_for_deletion():
 		machine_menu.queue_free()
 		machine_menu = null
 
@@ -1393,13 +1470,12 @@ func toggle_quota_menu() -> void:
 	if qm_script:
 		var qm = qm_script.new()
 		qm._player = self
-		qm._dnc = get_tree().get_first_node_in_group("day_night_cycle")
+		qm._dnc = dnc
+		if dnc and dnc.is_waiting_for_day_start and dnc.has_method("_on_quota_selection_confirmed"):
+			qm.day_started.connect(dnc._on_quota_selection_confirmed)
 		get_tree().current_scene.add_child(qm)
 		quota_menu_instance = qm
 		release_mouse()
-
-
-
 
 
 func _deferred_check_day_night_cycle() -> void:
@@ -1410,13 +1486,29 @@ func _deferred_check_day_night_cycle() -> void:
 		get_tree().current_scene.add_child(dnc)
 
 
-## Checks if any modal UI (Title, Quota, Buy, Machine, Pause, Night settlement) is currently open
-func is_any_menu_open() -> bool:
-	var title = get_tree().get_first_node_in_group("title_screen")
-	if title and is_instance_valid(title) and not title.is_queued_for_deletion() and title.is_inside_tree() and title.visible:
+func _has_active_group_node(group_name: String) -> bool:
+	for n in get_tree().get_nodes_in_group(group_name):
+		if is_instance_valid(n) and not n.is_queued_for_deletion() and n.is_inside_tree():
+			if "visible" in n and not n.visible:
+				continue
+			return true
+	return false
+
+
+## Fullscreen blocking overlays where gameplay hotkeys [B]/[M]/[Q]/[1-6]/[C]/[G]/[N] must NOT trigger
+func _is_blocking_overlay_open() -> bool:
+	if _has_active_group_node("title_screen") or _has_active_group_node("pause_menu") or _has_active_group_node("ui_modal_popup"):
 		return true
-	var pm_group = get_tree().get_first_node_in_group("pause_menu")
-	if pm_group and is_instance_valid(pm_group) and not pm_group.is_queued_for_deletion() and pm_group.is_inside_tree() and pm_group.visible:
+	if is_instance_valid(pause_menu) and not pause_menu.is_queued_for_deletion() and pause_menu.is_inside_tree() and pause_menu.visible:
+		return true
+	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
+	if dnc and dnc.is_night and dnc._night_modal and dnc._night_modal.visible:
+		return true
+	return false
+
+
+func _is_shop_or_contract_open() -> bool:
+	if _has_active_group_node("buy_menu") or _has_active_group_node("machine_buy_menu") or _has_active_group_node("quota_menu"):
 		return true
 	if is_instance_valid(quota_menu_instance) and not quota_menu_instance.is_queued_for_deletion() and quota_menu_instance.is_inside_tree() and quota_menu_instance.visible:
 		return true
@@ -1424,16 +1516,19 @@ func is_any_menu_open() -> bool:
 		return true
 	if is_instance_valid(machine_menu) and not machine_menu.is_queued_for_deletion() and machine_menu.is_inside_tree() and machine_menu.visible:
 		return true
-	if is_instance_valid(pause_menu) and not pause_menu.is_queued_for_deletion() and pause_menu.is_inside_tree() and pause_menu.visible:
+	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
+	if dnc and "quota_menu" in dnc and is_instance_valid(dnc.quota_menu) and not dnc.quota_menu.is_queued_for_deletion() and dnc.quota_menu.visible:
+		return true
+	return false
+
+
+## Checks if any modal UI (Title, Quota, Buy, Machine, Pause, Popups, Night settlement) is currently open
+func is_any_menu_open() -> bool:
+	if _is_blocking_overlay_open() or _is_shop_or_contract_open():
 		return true
 	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
-	if dnc:
-		if dnc.is_waiting_for_day_start:
-			return true
-		if "quota_menu" in dnc and is_instance_valid(dnc.quota_menu) and not dnc.quota_menu.is_queued_for_deletion() and dnc.quota_menu.visible:
-			return true
-		if dnc.is_night and dnc._night_modal and dnc._night_modal.visible:
-			return true
+	if dnc and dnc.is_waiting_for_day_start:
+		return true
 	return false
 
 
@@ -1864,6 +1959,10 @@ func _update_compass_hud() -> void:
 				nearest = mob
 
 	_compass_label.visible = true
+	# Dynamically clear EventHUDPanel (y=120..186) when an event banner is visible
+	var ev_visible := is_instance_valid(game_hud) and is_instance_valid(game_hud.event_panel) and game_hud.event_panel.visible
+	_compass_label.offset_top = 192 if ev_visible else 118
+	_compass_label.offset_bottom = 218 if ev_visible else 144
 	if nearest == null:
 		_compass_label.text = "🧭 COMPASS: No active event mob"
 		_compass_label.add_theme_color_override("font_color", Color(0.65, 0.72, 0.78))

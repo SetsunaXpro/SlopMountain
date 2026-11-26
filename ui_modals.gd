@@ -287,6 +287,15 @@ class PauseMenuOverlay extends CanvasLayer:
 			_did_pause_tree = false
 		if NetworkManager != null and NetworkManager.is_multiplayer_active():
 			NetworkManager.leave_game()
+		if is_instance_valid(dnc_ref):
+			if "is_waiting_for_day_start" in dnc_ref:
+				dnc_ref.is_waiting_for_day_start = true
+			if dnc_ref.has_method("_hide_night_modal"):
+				dnc_ref._hide_night_modal()
+		for grp in ["buy_menu", "machine_buy_menu", "quota_menu"]:
+			for n in get_tree().get_nodes_in_group(grp):
+				if is_instance_valid(n):
+					n.queue_free()
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 		var existing_title = get_tree().get_first_node_in_group("title_screen")
 		if not existing_title and get_tree().current_scene:
@@ -307,6 +316,7 @@ class HowToPlayOverlay extends CanvasLayer:
 	func _ready() -> void:
 		layer = 110
 		process_mode = Node.PROCESS_MODE_ALWAYS
+		add_to_group("ui_modal_popup")
 		_build_ui()
 		UIAssets.play_sfx("open", 0.03)
 
@@ -454,6 +464,7 @@ class SettingsOverlay extends CanvasLayer:
 	func _ready() -> void:
 		layer = 110
 		process_mode = Node.PROCESS_MODE_ALWAYS
+		add_to_group("ui_modal_popup")
 		UIAssets.load_and_apply_settings()
 		_build_ui()
 		UIAssets.play_sfx("open", 0.03)
@@ -690,6 +701,7 @@ class CreditsOverlay extends CanvasLayer:
 	func _ready() -> void:
 		layer = 110
 		process_mode = Node.PROCESS_MODE_ALWAYS
+		add_to_group("ui_modal_popup")
 		_build_ui()
 		UIAssets.play_sfx("open", 0.03)
 
