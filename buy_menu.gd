@@ -116,12 +116,22 @@ func _ready() -> void:
 	if hud:
 		hud.visible = false
 	UIAssets.sync_bgm()
+	UIAssets.play_sfx("open", 0.03)
 
 
 func _exit_tree() -> void:
-	var hud = get_tree().get_first_node_in_group("game_hud")
-	if hud:
-		hud.visible = true
+	# GameHUD self-syncs visibility every frame; only restore if no other menu/modal is active
+	var tree := get_tree()
+	if tree:
+		var any_other := false
+		for grp in ["title_screen", "buy_menu", "machine_buy_menu", "quota_menu", "pause_menu", "ui_modal_popup"]:
+			for n in tree.get_nodes_in_group(grp):
+				if n != self and is_instance_valid(n) and not n.is_queued_for_deletion():
+					any_other = true
+					break
+		var hud = tree.get_first_node_in_group("game_hud")
+		if hud and not any_other:
+			hud.visible = true
 	UIAssets.sync_bgm()
 
 
@@ -312,10 +322,10 @@ func _build_single_card(index: int, perk: Dictionary, pos_x: float) -> void:
 	cost_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	price_plate.add_child(cost_lbl)
 
-	# 4. Blueprint Window Art (Fits directly inside card's baked blueprint cutout)
+	# 4. Card Pixel-Art Window (186x115 exact fit inside card's baked artwork slot)
 	var art_slot := Control.new()
 	art_slot.position = Vector2(22, 46)
-	art_slot.size = Vector2(186, 114)
+	art_slot.size = Vector2(186, 115)
 	art_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card_base.add_child(art_slot)
 
@@ -325,7 +335,8 @@ func _build_single_card(index: int, perk: Dictionary, pos_x: float) -> void:
 		art_tr.texture = custom_art
 		art_tr.set_anchors_preset(Control.PRESET_FULL_RECT)
 		art_tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		art_tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		art_tr.stretch_mode = TextureRect.STRETCH_SCALE
+		art_tr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		art_tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		art_slot.add_child(art_tr)
 	else:
@@ -381,6 +392,7 @@ func _build_single_card(index: int, perk: Dictionary, pos_x: float) -> void:
 	)
 	buy_btn.position = Vector2(pos_x + 4.0, 422.0)
 	buy_btn.disabled = owned or (not can_buy)
+	buy_btn.set_meta("suppress_default_click_sfx", true)
 	buy_btn.pressed.connect(_on_buy_pressed.bind(perk, index))
 	_cards_container.add_child(buy_btn)
 	_buy_buttons.append(buy_btn)
@@ -402,6 +414,7 @@ func _build_bottom_bar() -> void:
 		5
 	)
 	_reroll_btn.position = Vector2(30, 638)
+	_reroll_btn.set_meta("suppress_default_click_sfx", true)
 	_reroll_btn.pressed.connect(_on_reroll_pressed)
 	_content.add_child(_reroll_btn)
 
@@ -482,13 +495,23 @@ func _refresh_header() -> void:
 	if is_instance_valid(_reroll_btn):
 		_reroll_btn.disabled = (funds < REROLL_COST)
 
+	if is_instance_valid(_start_btn):
+		if _dnc != null and _dnc.is_waiting_for_day_start:
+			_start_btn.text = "START DAY  ➔"
+		elif _dnc != null and _dnc.is_night:
+			_start_btn.text = "CLOSE SHOP  ➔"
+		else:
+			_start_btn.text = "RESUME SHIFT  ➔"
+
 
 func _on_buy_pressed(perk: Dictionary, card_index: int) -> void:
 	var cost: int = int(perk.get("cost", 0))
 	if _player == null or _player.slop_credit < cost:
+		UIAssets.play_sfx("error", 0.02)
 		_set_mossy_text("Mossy: \"Duitmu kurang, Ranger! Bersihkan sampah lagi!\"")
 		return
 
+	UIAssets.play_sfx("buy", 0.05)
 	if _player.has_method("spend_slop_credit"):
 		_player.spend_slop_credit(float(cost))
 	else:
@@ -514,9 +537,11 @@ func _on_buy_pressed(perk: Dictionary, card_index: int) -> void:
 
 func _on_reroll_pressed() -> void:
 	if _player == null or _player.slop_credit < REROLL_COST:
+		UIAssets.play_sfx("error", 0.02)
 		_set_mossy_text("Mossy: \"Reroll butuh $%d, uangmu kurang!\"" % REROLL_COST)
 		return
 
+	UIAssets.play_sfx("reroll", 0.06)
 	if _player.has_method("spend_slop_credit"):
 		_player.spend_slop_credit(float(REROLL_COST))
 	else:
@@ -544,7 +569,10 @@ func _on_start_day_pressed() -> void:
 		var dnc = get_tree().get_first_node_in_group("day_night_cycle")
 		if dnc:
 			dnc.is_waiting_for_day_start = false
-		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+		if _player != null and _player.has_method("capture_mouse"):
+			_player.capture_mouse()
+		else:
+			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 		queue_free()
 	)
 

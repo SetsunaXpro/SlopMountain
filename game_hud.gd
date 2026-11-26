@@ -52,12 +52,40 @@ func _ready() -> void:
 	_connect_to_systems()
 
 
+func _has_active_group_node(group_name: String) -> bool:
+	for n in get_tree().get_nodes_in_group(group_name):
+		if is_instance_valid(n) and not n.is_queued_for_deletion() and n.is_inside_tree():
+			if "visible" in n and not n.visible:
+				continue
+			return true
+	return false
+
+
+func _should_hide_hud(dnc: Node) -> bool:
+	if _has_active_group_node("title_screen"):
+		return true
+	if _has_active_group_node("buy_menu") or _has_active_group_node("machine_buy_menu") or _has_active_group_node("quota_menu"):
+		return true
+	if _has_active_group_node("pause_menu") or _has_active_group_node("ui_modal_popup"):
+		return true
+	if dnc and is_instance_valid(dnc):
+		if "_night_modal" in dnc and is_instance_valid(dnc._night_modal) and dnc._night_modal.visible:
+			return true
+		if "quota_menu" in dnc and is_instance_valid(dnc.quota_menu) and not dnc.quota_menu.is_queued_for_deletion() and dnc.quota_menu.visible:
+			return true
+	return false
+
+
 func _process(_delta: float) -> void:
+	var dnc := get_tree().get_first_node_in_group("day_night_cycle")
+	var should_show := not _should_hide_hud(dnc)
+	if visible != should_show:
+		visible = should_show
+
 	var player := get_tree().get_first_node_in_group("player")
 	if player:
 		_sync_perks_if_changed(player)
 
-	var dnc := get_tree().get_first_node_in_group("day_night_cycle")
 	if not dnc:
 		return
 
@@ -187,8 +215,8 @@ func _create_haul_quota_panel() -> Control:
 	quota_val_label.bbcode_enabled = true
 	quota_val_label.scroll_active = false
 	quota_val_label.fit_content = false
-	quota_val_label.position = Vector2(108, 10)
-	quota_val_label.size = Vector2(134, 22)
+	quota_val_label.position = Vector2(100, 9)
+	quota_val_label.size = Vector2(142, 18)
 	quota_val_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	quota_val_label.add_theme_font_override("normal_font", UIAssets.get_font("mono"))
 	quota_val_label.add_theme_font_override("bold_font", UIAssets.get_font("black"))
@@ -196,8 +224,9 @@ func _create_haul_quota_panel() -> Control:
 	quota_val_label.add_theme_font_size_override("bold_font_size", 12)
 	container.add_child(quota_val_label)
 
+	# Exact baked inner track cutout in hud_quota_bg.png: x=22..240 (w=219), y=30..45 (h=16)
 	quota_progress_bar = TextureProgressBar.new()
-	quota_progress_bar.position = Vector2(22, 37)
+	quota_progress_bar.position = Vector2(22, 30)
 	quota_progress_bar.custom_minimum_size = Vector2(219, 16)
 	quota_progress_bar.size = Vector2(219, 16)
 	quota_progress_bar.nine_patch_stretch = false
@@ -251,6 +280,7 @@ func _create_time_banner() -> Control:
 func _create_end_day_button() -> Button:
 	var btn := Button.new()
 	btn.text = "Hold [N] End Day"
+	btn.focus_mode = Control.FOCUS_NONE
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	btn.add_theme_font_override("font", UIAssets.get_font("bold"))
 	btn.add_theme_font_size_override("font_size", 11)
@@ -573,11 +603,11 @@ func update_quota(current: float, target: float, unit: String = "SC") -> void:
 	quota_unit = unit
 
 	if is_instance_valid(quota_val_label):
-		var cur_int := int(current)
-		var max_int := int(target)
+		var cur_str := "%d" % int(roundf(current)) if is_equal_approx(current, roundf(current)) else "%.1f" % current
+		var max_int := int(roundf(target))
 		var cur_col := "#52E67A" if current >= target and target > 0.0 else "#F5AE24"
-		quota_val_label.text = "[right][color=%s][b]%03d[/b][/color] [color=#7A8290]/[/color] [color=#F2F4F8][b]%d[/b][/color] [color=#F5AE24]%s[/color][/right]" % [
-			cur_col, cur_int, max_int, unit
+		quota_val_label.text = "[right][color=%s][b]%s[/b][/color] [color=#7A8290]/[/color] [color=#F2F4F8][b]%d[/b][/color] [color=#F5AE24]%s[/color][/right]" % [
+			cur_col, cur_str, max_int, unit
 		]
 
 	if is_instance_valid(quota_progress_bar):
@@ -946,9 +976,10 @@ class PerkSlotWidget extends Control:
 			_fill_panel.add_theme_stylebox_override("panel", sb)
 			_fill_panel.visible = true
 
-			var custom_art := UIAssets.get_card_art(perk_id)
+			var custom_art := UIAssets.get_perk_icon(perk_id)
 			if custom_art != null and is_instance_valid(_art_rect):
 				_art_rect.texture = custom_art
+				_art_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 				_art_rect.visible = true
 				if is_instance_valid(_icon_label):
 					_icon_label.visible = false

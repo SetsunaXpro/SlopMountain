@@ -108,6 +108,14 @@ static func get_card_art(item_id: String) -> Texture2D:
 	return null
 
 
+## Checks for a transparent sprite icon cutout for the compact HUD Equipped Rail
+static func get_perk_icon(item_id: String) -> Texture2D:
+	var icon_tex := get_tex("res://UI/03_cards/art/%s_icon.png" % item_id)
+	if icon_tex != null:
+		return icon_tex
+	return get_card_art(item_id)
+
+
 # ---------------------------------------------------------------------------
 # Control Builders
 # ---------------------------------------------------------------------------
@@ -270,6 +278,15 @@ static func create_wood_button(
 		var sb_foc := StyleBoxEmpty.new()
 		btn.add_theme_stylebox_override("focus", sb_foc)
 
+	btn.mouse_entered.connect(func():
+		if not btn.disabled:
+			UIAssets.play_sfx("hover", 0.05)
+	)
+	btn.pressed.connect(func():
+		if not btn.get_meta("suppress_default_click_sfx", false):
+			UIAssets.play_sfx("click", 0.04)
+	)
+
 	return btn
 
 
@@ -367,6 +384,19 @@ const BGM_TRACKS := {
 	"fail":     {"path": "res://Music/last flashback raymaster (run fail ost).wav",      "db": -7.0},
 }
 
+# Genuine CC0 UI SFX by Kenney (https://kenney.nl — see UI/sfx/LICENSE_KENNEY_CC0.txt)
+const SFX_CLIPS := {
+	"hover":   {"path": "res://UI/sfx/ui_hover.wav",   "db": -14.0},
+	"click":   {"path": "res://UI/sfx/ui_click.wav",   "db": -6.0},
+	"buy":     {"path": "res://UI/sfx/ui_buy.ogg",     "db": -4.0},
+	"reroll":  {"path": "res://UI/sfx/ui_reroll.ogg",  "db": -4.0},
+	"stamp":   {"path": "res://UI/sfx/ui_stamp.ogg",   "db": -3.0},
+	"open":    {"path": "res://UI/sfx/ui_open.ogg",    "db": -6.0},
+	"close":   {"path": "res://UI/sfx/ui_close.ogg",   "db": -6.0},
+	"error":   {"path": "res://UI/sfx/ui_error.wav",   "db": -6.0},
+	"confirm": {"path": "res://UI/sfx/ui_confirm.wav", "db": -6.0},
+}
+
 
 static func get_music_manager() -> Node:
 	var ml := Engine.get_main_loop()
@@ -397,6 +427,12 @@ static func play_bgm(track_key: String, fade_sec: float = 0.55) -> void:
 		mgr.play_track(track_key, fade_sec)
 
 
+static func play_sfx(sfx_key: String, pitch_jitter: float = 0.04) -> void:
+	var mgr := get_music_manager()
+	if mgr != null and mgr.has_method("play_sfx_clip"):
+		mgr.play_sfx_clip(sfx_key, pitch_jitter)
+
+
 class MusicController extends Node:
 	var _p_a: AudioStreamPlayer = null
 	var _p_b: AudioStreamPlayer = null
@@ -406,6 +442,9 @@ class MusicController extends Node:
 	var _fade_tween: Tween = null
 	var _duck_tween: Tween = null
 	var _stream_cache: Dictionary = {}
+	var _sfx_cache: Dictionary = {}
+	var _sfx_pool: Array[AudioStreamPlayer] = []
+	var _sfx_cursor: int = 0
 	var _poll_accum: float = 0.0
 
 	func _ready() -> void:
@@ -414,7 +453,40 @@ class MusicController extends Node:
 		_p_a = _make_player("BGMChannelA")
 		_p_b = _make_player("BGMChannelB")
 		_active_player = _p_a
+		for i in range(4):
+			var sp := AudioStreamPlayer.new()
+			sp.name = "UISFX_%d" % i
+			sp.bus = "SFX"
+			sp.process_mode = Node.PROCESS_MODE_ALWAYS
+			add_child(sp)
+			_sfx_pool.append(sp)
 		call_deferred("_evaluate_and_apply")
+
+	func _load_sfx(sfx_key: String) -> AudioStream:
+		if _sfx_cache.has(sfx_key):
+			return _sfx_cache[sfx_key]
+		if not UIAssets.SFX_CLIPS.has(sfx_key):
+			return null
+		var path: String = str(UIAssets.SFX_CLIPS[sfx_key]["path"])
+		if not ResourceLoader.exists(path):
+			return null
+		var stream := load(path) as AudioStream
+		if stream != null:
+			_sfx_cache[sfx_key] = stream
+		return stream
+
+	func play_sfx_clip(sfx_key: String, pitch_jitter: float = 0.04) -> void:
+		if _sfx_pool.is_empty():
+			return
+		var stream := _load_sfx(sfx_key)
+		if stream == null:
+			return
+		var sp: AudioStreamPlayer = _sfx_pool[_sfx_cursor % _sfx_pool.size()]
+		_sfx_cursor += 1
+		sp.stream = stream
+		sp.volume_db = float(UIAssets.SFX_CLIPS[sfx_key].get("db", -6.0))
+		sp.pitch_scale = 1.0 + randf_range(-pitch_jitter, pitch_jitter) if pitch_jitter > 0.0 else 1.0
+		sp.play()
 
 	func _make_player(n: String) -> AudioStreamPlayer:
 		var p := AudioStreamPlayer.new()
