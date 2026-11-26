@@ -4,6 +4,9 @@
 
 extends CharacterBody3D
 
+const UIAssets = preload("res://ui_assets.gd")
+const UIModals = preload("res://ui_modals.gd")
+
 ## Can we move around?
 @export var can_move : bool = true
 ## Are we affected by gravity?
@@ -335,6 +338,14 @@ func _ready() -> void:
 	_setup_hud()
 
 
+func _input(event: InputEvent) -> void:
+	if not _is_local_player():
+		return
+	# Smooth camera look in _input so moving/clicking never stalls rotation
+	if mouse_captured and event is InputEventMouseMotion and not is_any_menu_open():
+		rotate_look(event.relative)
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not _is_local_player():
 		return
@@ -439,10 +450,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			toggle_pause_menu()
 		else:
 			release_mouse()
-
-	# Look around
-	if mouse_captured and event is InputEventMouseMotion:
-		rotate_look(event.relative)
 
 	# Toggle freefly mode
 	if can_freefly and Input.is_action_just_pressed(input_freefly):
@@ -1406,126 +1413,50 @@ func _deferred_check_day_night_cycle() -> void:
 ## Checks if any modal UI (Title, Quota, Buy, Machine, Pause, Night settlement) is currently open
 func is_any_menu_open() -> bool:
 	var title = get_tree().get_first_node_in_group("title_screen")
-	if title and is_instance_valid(title) and title.is_inside_tree() and title.visible:
+	if title and is_instance_valid(title) and not title.is_queued_for_deletion() and title.is_inside_tree() and title.visible:
 		return true
-	if is_instance_valid(quota_menu_instance) and quota_menu_instance.is_inside_tree() and quota_menu_instance.visible:
+	var pm_group = get_tree().get_first_node_in_group("pause_menu")
+	if pm_group and is_instance_valid(pm_group) and not pm_group.is_queued_for_deletion() and pm_group.is_inside_tree() and pm_group.visible:
 		return true
-	if is_instance_valid(buy_menu) and buy_menu.is_inside_tree() and buy_menu.visible:
+	if is_instance_valid(quota_menu_instance) and not quota_menu_instance.is_queued_for_deletion() and quota_menu_instance.is_inside_tree() and quota_menu_instance.visible:
 		return true
-	if is_instance_valid(machine_menu) and machine_menu.is_inside_tree() and machine_menu.visible:
+	if is_instance_valid(buy_menu) and not buy_menu.is_queued_for_deletion() and buy_menu.is_inside_tree() and buy_menu.visible:
 		return true
-	if is_instance_valid(pause_menu) and pause_menu.is_inside_tree() and pause_menu.visible:
+	if is_instance_valid(machine_menu) and not machine_menu.is_queued_for_deletion() and machine_menu.is_inside_tree() and machine_menu.visible:
+		return true
+	if is_instance_valid(pause_menu) and not pause_menu.is_queued_for_deletion() and pause_menu.is_inside_tree() and pause_menu.visible:
 		return true
 	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
 	if dnc:
 		if dnc.is_waiting_for_day_start:
+			return true
+		if "quota_menu" in dnc and is_instance_valid(dnc.quota_menu) and not dnc.quota_menu.is_queued_for_deletion() and dnc.quota_menu.visible:
 			return true
 		if dnc.is_night and dnc._night_modal and dnc._night_modal.visible:
 			return true
 	return false
 
 
-## Toggles in-game Pause Menu
+## Toggles in-game Pause Menu (Figma 05_modals Compact Corkboard)
 func toggle_pause_menu() -> void:
 	if is_building:
 		cancel_build_mode()
-	if is_instance_valid(pause_menu):
-		pause_menu.queue_free()
+	if is_instance_valid(pause_menu) and not pause_menu.is_queued_for_deletion():
+		if pause_menu.has_method("_on_resume"):
+			pause_menu._on_resume()
+		else:
+			pause_menu.queue_free()
+			capture_mouse()
 		pause_menu = null
-		capture_mouse()
 		return
 
 	release_mouse()
-
-	var pm := CanvasLayer.new()
-	pm.layer = 50
-	pm.name = "PauseMenu"
-
-	var root := Control.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.mouse_filter = Control.MOUSE_FILTER_STOP
-	pm.add_child(root)
-
-	var dim := ColorRect.new()
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dim.color = Color(0, 0, 0, 0.65)
-	root.add_child(dim)
-
-	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -220
-	panel.offset_right = 220
-	panel.offset_top = -220
-	panel.offset_bottom = 220
-
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = Color(0.12, 0.14, 0.18, 0.96)
-	sb.border_color = Color(0.35, 0.65, 0.95)
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(8)
-	sb.content_margin_left = 24
-	sb.content_margin_right = 24
-	sb.content_margin_top = 20
-	sb.content_margin_bottom = 20
-	panel.add_theme_stylebox_override("panel", sb)
-	root.add_child(panel)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 10)
-	panel.add_child(vbox)
-
-	var title := Label.new()
-	title.text = "PAUSED"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 22)
-	title.add_theme_color_override("font_color", Color(0.95, 0.85, 0.35))
-	vbox.add_child(title)
-
-	var resume_btn := Button.new()
-	resume_btn.text = "RESUME"
-	resume_btn.custom_minimum_size = Vector2(0, 36)
-	resume_btn.pressed.connect(func(): toggle_pause_menu())
-	vbox.add_child(resume_btn)
-
-	var q_btn := Button.new()
-	q_btn.text = "CONTRACT BOARD [Q]"
-	q_btn.custom_minimum_size = Vector2(0, 36)
-	q_btn.pressed.connect(func():
-		toggle_pause_menu()
-		toggle_quota_menu()
+	var dnc = get_tree().get_first_node_in_group("day_night_cycle")
+	var pm := UIModals.open_pause_menu(get_tree().current_scene, self, dnc)
+	pm.closed.connect(func():
+		if pause_menu == pm:
+			pause_menu = null
 	)
-	vbox.add_child(q_btn)
-
-	var b_btn := Button.new()
-	b_btn.text = "MOD SHOP [B]"
-	b_btn.custom_minimum_size = Vector2(0, 36)
-	b_btn.pressed.connect(func():
-		toggle_pause_menu()
-		toggle_buy_menu()
-	)
-	vbox.add_child(b_btn)
-
-	var title_btn := Button.new()
-	title_btn.text = "RETURN TO TITLE SCREEN"
-	title_btn.custom_minimum_size = Vector2(0, 36)
-	title_btn.pressed.connect(func():
-		toggle_pause_menu()
-		var existing_title = get_tree().get_first_node_in_group("title_screen")
-		if not existing_title:
-			var ts_script = load("res://title_screen.gd")
-			if ts_script:
-				var ts = ts_script.new()
-				get_tree().current_scene.add_child(ts)
-	)
-	vbox.add_child(title_btn)
-
-	var quit_btn := Button.new()
-	quit_btn.text = "QUIT TO DESKTOP"
-	quit_btn.custom_minimum_size = Vector2(0, 36)
-	quit_btn.pressed.connect(func(): get_tree().quit())
-	vbox.add_child(quit_btn)
-
-	get_tree().current_scene.add_child(pm)
 	pause_menu = pm
 
 
@@ -1827,26 +1758,28 @@ func _setup_machine_hotbar(root: Control) -> void:
 	_build_hotbar_container.name = "MachineHotbar"
 	_build_hotbar_container.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	_build_hotbar_container.alignment = BoxContainer.ALIGNMENT_CENTER
-	_build_hotbar_container.offset_top = -68.0
-	_build_hotbar_container.offset_bottom = -20.0
+	_build_hotbar_container.offset_top = -82.0
+	_build_hotbar_container.offset_bottom = -38.0
 	_build_hotbar_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_build_hotbar_container.add_theme_constant_override("separation", 10)
+	_build_hotbar_container.add_theme_constant_override("separation", 6)
 	root.add_child(_build_hotbar_container)
 
 	_build_slot_panels.clear()
 	_build_slot_labels.clear()
 
-	# Create 6 empty inventory grid slots (1 to 6) at bottom-center
+	# 6 compact slots (70x44 each) + Build Action (84x44) + 6*6px gaps = 540px total
+	# Fits cleanly inside the 607px center gap between Pack Caddy (x=22..329) and Equipped Rail (x=936..1258)
 	for i in range(HOTBAR_GRID_SLOTS):
 		var panel = PanelContainer.new()
-		panel.custom_minimum_size = Vector2(96, 48)
+		panel.custom_minimum_size = Vector2(70, 44)
 		panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 		var lbl = Label.new()
 		lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		lbl.add_theme_font_size_override("font_size", 12)
+		lbl.add_theme_font_override("font", UIAssets.get_font("bold"))
+		lbl.add_theme_font_size_override("font_size", 11)
 		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		panel.add_child(lbl)
 
@@ -1857,25 +1790,31 @@ func _setup_machine_hotbar(root: Control) -> void:
 	# Compass HUD Indicator (shown when Tracker Compass is owned)
 	_compass_label = Label.new()
 	_compass_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_compass_label.position = Vector2(-190, 96)
-	_compass_label.size = Vector2(380, 28)
+	_compass_label.offset_left = -190
+	_compass_label.offset_right = 190
+	_compass_label.offset_top = 118
+	_compass_label.offset_bottom = 144
 	_compass_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_compass_label.add_theme_font_size_override("font_size", 14)
-	_compass_label.add_theme_color_override("font_color", Color(0.45, 0.95, 1.0))
+	_compass_label.add_theme_font_override("font", UIAssets.get_font("bold"))
+	_compass_label.add_theme_font_size_override("font_size", 13)
+	_compass_label.add_theme_color_override("font_color", Color(0.98, 0.86, 0.42))
+	_compass_label.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.65))
+	_compass_label.add_theme_constant_override("shadow_offset_y", 2)
 	_compass_label.visible = false
 	_compass_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_compass_label)
 
 	# Build Action Indicator Slot (C key)
 	_build_indicator_panel = PanelContainer.new()
-	_build_indicator_panel.custom_minimum_size = Vector2(130, 44)
+	_build_indicator_panel.custom_minimum_size = Vector2(84, 44)
 	_build_indicator_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 	_build_indicator_lbl = Label.new()
 	_build_indicator_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_build_indicator_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_build_indicator_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_build_indicator_lbl.add_theme_font_size_override("font_size", 13)
+	_build_indicator_lbl.add_theme_font_override("font", UIAssets.get_font("extrabold"))
+	_build_indicator_lbl.add_theme_font_size_override("font_size", 11)
 	_build_indicator_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_build_indicator_panel.add_child(_build_indicator_lbl)
 
@@ -1965,59 +1904,56 @@ func _update_machine_hotbar() -> void:
 		var is_sel = (i == selected_hotbar_slot)
 
 		var style := StyleBoxFlat.new()
-		style.corner_radius_top_left = 6
-		style.corner_radius_top_right = 6
-		style.corner_radius_bottom_left = 6
-		style.corner_radius_bottom_right = 6
+		style.set_border_width_all(0)
+		style.set_corner_radius_all(7)
+		style.shadow_color = Color(0.0, 0.0, 0.0, 0.30)
+		style.shadow_size = 4
+		style.shadow_offset = Vector2(0, 2)
 
 		if i < items.size():
 			var m = items[i]
-			lbl.text = "[%d] %s\n%s" % [i + 1, m.icon, m.get("short_name", m.name)]
+			lbl.text = "%d %s\n%s" % [i + 1, m.icon, m.get("short_name", m.name)]
 			if is_sel:
-				style.bg_color = Color(0.18, 0.16, 0.08, 0.92)
-				style.border_color = Color(1.0, 0.85, 0.25, 1.0)
-				style.set_border_width_all(2)
-				lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.45))
+				style.bg_color = Color(0.32, 0.23, 0.10, 0.95)
+				style.border_width_bottom = 3
+				style.border_color = Color(0.98, 0.78, 0.26, 1.0)
+				lbl.add_theme_color_override("font_color", Color(1.0, 0.94, 0.60))
 			else:
-				style.bg_color = Color(0.08, 0.10, 0.14, 0.82)
-				style.border_color = Color(0.28, 0.35, 0.42, 0.7)
-				style.set_border_width_all(1)
-				lbl.add_theme_color_override("font_color", Color(0.85, 0.90, 0.95))
+				style.bg_color = Color(0.11, 0.13, 0.16, 0.86)
+				lbl.add_theme_color_override("font_color", Color(0.88, 0.90, 0.94))
 		else:
-			lbl.text = "[%d]" % (i + 1)
-			style.bg_color = Color(0.05, 0.06, 0.08, 0.55)
-			style.border_color = Color(0.28, 0.30, 0.36, 0.6) if is_sel else Color(0.18, 0.20, 0.24, 0.45)
-			style.set_border_width_all(1)
-			lbl.add_theme_color_override("font_color", Color(0.40, 0.42, 0.48))
+			lbl.text = "%d" % (i + 1)
+			style.bg_color = Color(0.14, 0.16, 0.20, 0.82) if is_sel else Color(0.08, 0.09, 0.12, 0.68)
+			if is_sel:
+				style.border_width_bottom = 3
+				style.border_color = Color(0.85, 0.72, 0.38, 0.75)
+			lbl.add_theme_color_override("font_color", Color(0.68, 0.70, 0.74) if is_sel else Color(0.45, 0.48, 0.54))
 
 		panel.add_theme_stylebox_override("panel", style)
 
 	# Update Build indicator slot
 	if is_instance_valid(_build_indicator_panel) and is_instance_valid(_build_indicator_lbl):
 		var style := StyleBoxFlat.new()
-		style.corner_radius_top_left = 6
-		style.corner_radius_top_right = 6
-		style.corner_radius_bottom_left = 6
-		style.corner_radius_bottom_right = 6
+		style.set_border_width_all(0)
+		style.set_corner_radius_all(7)
+		style.shadow_color = Color(0.0, 0.0, 0.0, 0.30)
+		style.shadow_size = 4
+		style.shadow_offset = Vector2(0, 2)
 
 		if is_building:
-			_build_indicator_lbl.text = "🔨 [C] PLACE"
-			_build_indicator_lbl.add_theme_color_override("font_color", Color(0.25, 1.0, 0.5))
-			style.bg_color = Color(0.06, 0.22, 0.10, 0.95)
-			style.border_color = Color(0.25, 1.0, 0.5, 1.0)
-			style.set_border_width_all(2)
+			_build_indicator_lbl.text = "🔨 Place"
+			_build_indicator_lbl.add_theme_color_override("font_color", Color(0.38, 1.0, 0.56))
+			style.bg_color = Color(0.10, 0.26, 0.14, 0.94)
+			style.border_width_bottom = 3
+			style.border_color = Color(0.32, 0.92, 0.50, 1.0)
 		elif selected_hotbar_slot < items.size():
-			_build_indicator_lbl.text = "[C] BUILD"
-			_build_indicator_lbl.add_theme_color_override("font_color", Color(0.65, 0.9, 1.0))
-			style.bg_color = Color(0.08, 0.14, 0.22, 0.85)
-			style.border_color = Color(0.28, 0.55, 0.85, 0.85)
-			style.set_border_width_all(1)
+			_build_indicator_lbl.text = "[C] Build"
+			_build_indicator_lbl.add_theme_color_override("font_color", Color(1.0, 0.93, 0.72))
+			style.bg_color = Color(0.34, 0.22, 0.09, 0.92)
 		else:
-			_build_indicator_lbl.text = "[M] SHOP"
-			_build_indicator_lbl.add_theme_color_override("font_color", Color(0.55, 0.58, 0.65))
-			style.bg_color = Color(0.06, 0.08, 0.10, 0.7)
-			style.border_color = Color(0.2, 0.25, 0.3, 0.5)
-			style.set_border_width_all(1)
+			_build_indicator_lbl.text = "[M] Shop"
+			_build_indicator_lbl.add_theme_color_override("font_color", Color(0.82, 0.84, 0.88))
+			style.bg_color = Color(0.11, 0.13, 0.16, 0.84)
 
 		_build_indicator_panel.add_theme_stylebox_override("panel", style)
 

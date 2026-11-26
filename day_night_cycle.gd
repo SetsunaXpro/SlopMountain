@@ -1,9 +1,11 @@
 # day_night_cycle.gd
-# Manages the 7-minute Day timer, smooth sun rotation & lighting,
-# daily sunset collection quota, night pause state, and transitions.
+# Manages the 7-minute Day timer, smooth sun rotation & Evernight/night lighting,
+# daily sunset collection quota, multiplayer RPC sync, and Figma 05_modals Win & Game Over screens.
 
 class_name DayNightCycle
 extends Node
+
+const UIAssets = preload("res://ui_assets.gd")
 
 signal day_started(day_number: int)
 signal night_started(day_number: int, quota_met: bool)
@@ -11,43 +13,34 @@ signal time_updated(day_progress: float, hour: int, minute: int)
 signal quota_achieved(target_amount: float)
 signal quota_failed(collected_amount: float, target_amount: float)
 
+const MAX_DAYS: int = 8
+
 # ---------------------------------------------------------------------------
 # Timing Configuration
 # ---------------------------------------------------------------------------
 @export_group("Cycle Timing")
-## Duration of daytime in seconds (default: 420.0s = 7 minutes)
 @export var day_duration_seconds: float = 420.0
-## Debug speed multiplier (1.0 = real-time 7 mins, 10.0 = 42 seconds for testing)
 @export var debug_time_scale: float = 1.0
-## Current day number
 @export var current_day: int = 1
-## Virtual clock hour at sunrise (e.g. 6.0 = 6:00 AM)
 @export var sunrise_hour: float = 6.0
-## Virtual clock hour when sunset begins (e.g. 19.5 = 7:30 PM)
 @export var sunset_hour: float = 19.5
 
 # ---------------------------------------------------------------------------
 # Daily Sunset Collection Quota
 # ---------------------------------------------------------------------------
 @export_group("Daily Sunset Quota")
-## Whether the player must collect a quota before sunset
 @export var quota_enabled: bool = true
 
 enum QuotaType { SLOP_CREDIT, ITEM_COUNT }
-## Whether quota checks SlopCredit earned or total items bagged today
 @export var quota_type: QuotaType = QuotaType.SLOP_CREDIT
-## Base quota required on Day 1 (e.g. 15.0 SC or 15 items)
 @export var base_quota: float = 15.0
-## Additional quota required each subsequent day (Day 1: 15, Day 2: 20, etc.)
 @export var quota_increase_per_day: float = 5.0
 
 # ---------------------------------------------------------------------------
 # Lighting Node References
 # ---------------------------------------------------------------------------
 @export_group("Lighting References")
-## Explicit path to DirectionalLight3D (auto-detected if empty)
 @export var sun_node_path: NodePath
-## Explicit path to WorldEnvironment (auto-detected if empty)
 @export var world_env_path: NodePath
 
 # ---------------------------------------------------------------------------
@@ -61,7 +54,6 @@ var _sun: DirectionalLight3D = null
 var _world_env: WorldEnvironment = null
 var _procedural_sky: ProceduralSkyMaterial = null
 
-# Cached original lighting
 var _orig_sun_energy: float = 1.0
 var _orig_sun_color: Color = Color(1.0, 1.0, 1.0)
 var _orig_sky_top: Color = Color(0.35, 0.55, 0.85)
@@ -71,6 +63,7 @@ var _orig_sky_energy: float = 1.0
 
 # UI References
 var _canvas: CanvasLayer = null
+var _fade_canvas: CanvasLayer = null
 var _hud_card: PanelContainer = null
 var _hud_day_label: Label = null
 var _hud_time_label: Label = null
@@ -80,8 +73,20 @@ var _hud_day_progress: ProgressBar = null
 var _hud_corner_next_btn: Button = null
 
 var _night_modal: Control = null
-var _night_title_label: Label = null
-var _night_stats_label: Label = null
+var _win_root: Control = null
+var _lose_root: Control = null
+
+var _win_header_label: Label = null
+var _win_sub_label: Label = null
+var _win_big_earn_label: Label = null
+var _win_row_vals: Array[Label] = []
+
+var _lose_sub_label: Label = null
+var _lose_deficit_label: Label = null
+var _lose_deficit_bar: TextureProgressBar = null
+var _lose_row_vals: Array[Label] = []
+
+# Preserved button references for backwards compatibility
 var _night_next_btn: Button = null
 var _night_retry_btn: Button = null
 var _night_pay_btn: Button = null
@@ -90,7 +95,7 @@ var _night_explore_btn: Button = null
 var _fade_rect: ColorRect = null
 var _fade_tween: Tween = null
 
-# Quota / Contract Selection State
+# Quota / Contract Selection & Event State
 var is_waiting_for_day_start: bool = false
 var custom_day_quota: float = -1.0
 var quota_menu: CanvasLayer = null
@@ -107,6 +112,7 @@ func set_game_mode(mode: int) -> void:
 
 func _ready() -> void:
 	add_to_group("day_night_cycle")
+	UIAssets.load_and_apply_settings()
 	var es_script = preload("res://event_system.gd")
 	event_system = es_script.new()
 	event_system.dnc = self
@@ -119,11 +125,22 @@ func _ready() -> void:
 		_apply_lighting(0.0)
 	else:
 		emit_signal("day_started", current_day)
+	UIAssets.sync_bgm()
 	print("DayNightCycle: Initialized. Day duration: %.1f seconds (~%.1f mins). Day 1 Quota: %.1f" % [day_duration_seconds, day_duration_seconds / 60.0, get_current_quota()])
 
 
+func get_music_state() -> String:
+	if is_instance_valid(_night_modal) and _night_modal.visible:
+		if is_instance_valid(_lose_root) and _lose_root.visible:
+			return "fail"
+		if is_instance_valid(_win_root) and _win_root.visible:
+			return "win"
+	if event_system != null and event_system.is_event_active:
+		return "boss"
+	return "gameplay"
+
+
 func _setup_lighting_references() -> void:
-	# 1. Resolve DirectionalLight3D
 	if sun_node_path and has_node(sun_node_path):
 		_sun = get_node(sun_node_path) as DirectionalLight3D
 	else:
@@ -132,11 +149,9 @@ func _setup_lighting_references() -> void:
 	if _sun:
 		_orig_sun_energy = _sun.light_energy
 		_orig_sun_color = _sun.light_color
-		print("DayNightCycle: Found sun light '%s'" % _sun.name)
 	else:
 		push_warning("DayNightCycle: No DirectionalLight3D found in scene!")
 
-	# 2. Resolve WorldEnvironment
 	if world_env_path and has_node(world_env_path):
 		_world_env = get_node(world_env_path) as WorldEnvironment
 	else:
@@ -150,9 +165,7 @@ func _setup_lighting_references() -> void:
 			_orig_sky_horizon = _procedural_sky.sky_horizon_color
 			_orig_ground_horizon = _procedural_sky.ground_horizon_color
 			_orig_sky_energy = _procedural_sky.sky_energy_multiplier
-			print("DayNightCycle: Found ProceduralSkyMaterial in WorldEnvironment")
 
-	# Initial day lighting
 	_apply_lighting(0.0)
 
 
@@ -168,14 +181,12 @@ func _find_first_node_of_type(root: Node, type_str: String) -> Node:
 	return null
 
 
-## Calculates the required quota for the current day
 func get_current_quota() -> float:
 	if custom_day_quota >= 0.0:
 		return custom_day_quota
 	return maxf(1.0, base_quota + float(current_day - 1) * quota_increase_per_day)
 
 
-## Reads current daily progress from player
 func get_daily_progress_amount() -> float:
 	var player := get_tree().get_first_node_in_group("player")
 	if player:
@@ -187,13 +198,12 @@ func get_daily_progress_amount() -> float:
 
 
 func _process(delta: float) -> void:
-	# Only pause time if a menu (TitleScreen or QuotaMenu) is actively open and visible
 	if is_waiting_for_day_start:
 		var has_menu := false
-		if is_instance_valid(quota_menu) and quota_menu.is_inside_tree() and quota_menu.visible:
+		if is_instance_valid(quota_menu) and not quota_menu.is_queued_for_deletion() and quota_menu.is_inside_tree() and quota_menu.visible:
 			has_menu = true
 		var title = get_tree().get_first_node_in_group("title_screen")
-		if title and is_instance_valid(title) and title.is_inside_tree() and title.visible:
+		if title and is_instance_valid(title) and not title.is_queued_for_deletion() and title.is_inside_tree() and title.visible:
 			has_menu = true
 
 		if has_menu:
@@ -202,23 +212,24 @@ func _process(delta: float) -> void:
 		else:
 			is_waiting_for_day_start = false
 
+	var is_host := (NetworkManager == null) or NetworkManager.is_host()
+	var is_mp := (NetworkManager != null) and NetworkManager.is_multiplayer_active()
+
 	if not is_night:
-		if NetworkManager.is_host():
+		if is_host:
 			day_elapsed_seconds += delta * debug_time_scale
-			if NetworkManager.is_multiplayer_active():
+			if is_mp:
 				_net_time_sync_accum += delta
 				if _net_time_sync_accum >= 0.5:
 					_net_time_sync_accum = 0.0
 					_rpc_sync_time.rpc(current_day, day_elapsed_seconds, is_night, is_waiting_for_day_start, custom_day_quota)
 		else:
-			# Clients smoothly advance locally between host sync snapshots
 			day_elapsed_seconds = minf(day_elapsed_seconds + delta * debug_time_scale, day_duration_seconds)
 
 		var progress: float = clampf(day_elapsed_seconds / day_duration_seconds, 0.0, 1.0)
 		_apply_lighting(progress)
 		_update_hud(progress)
 
-		# Check if quota achieved mid-day for toast feedback
 		if quota_enabled and not _quota_toast_triggered:
 			var collected := get_daily_progress_amount()
 			var target := get_current_quota()
@@ -229,7 +240,7 @@ func _process(delta: float) -> void:
 				if player and player.has_method("_show_feedback"):
 					player._show_feedback("🎉 Sunset Quota Met! (%.1f reached)" % collected)
 
-		if NetworkManager.is_host() and day_elapsed_seconds >= day_duration_seconds:
+		if is_host and day_elapsed_seconds >= day_duration_seconds:
 			trigger_night()
 	else:
 		_update_night_lighting()
@@ -237,11 +248,10 @@ func _process(delta: float) -> void:
 
 
 # ===========================================================================
-# Lighting & Sun Rotation
+# Lighting & Sun Rotation (100% Preserved from 3e26359)
 # ===========================================================================
 
 func _apply_lighting(progress: float) -> void:
-	# Check if Evernight boss event is active
 	if event_system and event_system.is_event_active and event_system.active_event_id == "evernight":
 		_apply_evernight_lighting()
 		var clock_hour_e: float = lerpf(sunrise_hour, sunset_hour, progress)
@@ -250,32 +260,26 @@ func _apply_lighting(progress: float) -> void:
 		emit_signal("time_updated", progress, h_int, m_int)
 		return
 
-	# Calculate virtual clock hour
 	var clock_hour: float = lerpf(sunrise_hour, sunset_hour, progress)
 	var hour_int: int = int(clock_hour)
 	var minute_int: int = int((clock_hour - hour_int) * 60.0)
 	emit_signal("time_updated", progress, hour_int, minute_int)
 
-	# Sun rotation across the sky (East to West)
 	if _sun:
 		var pitch_deg: float = -15.0 - (60.0 * sin(progress * PI))
 		var yaw_deg: float = lerpf(-80.0, 80.0, progress)
 		_sun.rotation = Vector3(deg_to_rad(pitch_deg), deg_to_rad(yaw_deg), 0.0)
 
-		# Color & intensity shifts
 		var sun_col: Color
 		var sun_energy: float
 		if progress < 0.2:
-			# Sunrise transition
 			var t := progress / 0.2
 			sun_col = Color(1.0, 0.72, 0.45).lerp(Color(1.0, 0.98, 0.92), t)
 			sun_energy = lerpf(0.6 * _orig_sun_energy, _orig_sun_energy, t)
 		elif progress < 0.75:
-			# Midday sun
 			sun_col = Color(1.0, 0.98, 0.92)
 			sun_energy = _orig_sun_energy * 1.1
 		else:
-			# Sunset / Golden hour transition
 			var t := (progress - 0.75) / 0.25
 			sun_col = Color(1.0, 0.98, 0.92).lerp(Color(1.0, 0.45, 0.2), t)
 			sun_energy = lerpf(_orig_sun_energy * 1.1, 0.2 * _orig_sun_energy, t)
@@ -283,7 +287,6 @@ func _apply_lighting(progress: float) -> void:
 		_sun.light_color = sun_col
 		_sun.light_energy = sun_energy
 
-	# Procedural sky tint (restore normal sky when not in Evernight)
 	if _world_env and _world_env.environment:
 		_world_env.environment.fog_enabled = false
 		_world_env.environment.ambient_light_color = Color(1.0, 1.0, 1.0)
@@ -306,7 +309,7 @@ func _apply_lighting(progress: float) -> void:
 func _apply_evernight_lighting() -> void:
 	if _sun:
 		_sun.rotation = Vector3(deg_to_rad(-25.0), deg_to_rad(45.0), 0.0)
-		_sun.light_color = Color(0.95, 0.12, 0.14) # Menacing crimson sun
+		_sun.light_color = Color(0.95, 0.12, 0.14)
 		_sun.light_energy = 0.55
 	if _procedural_sky:
 		_procedural_sky.sky_top_color = Color(0.18, 0.01, 0.03)
@@ -322,7 +325,6 @@ func _apply_evernight_lighting() -> void:
 
 func _update_night_lighting() -> void:
 	if _sun:
-		# Moonlight
 		_sun.rotation = Vector3(deg_to_rad(-45.0), deg_to_rad(120.0), 0.0)
 		_sun.light_color = Color(0.3, 0.45, 0.75)
 		_sun.light_energy = 0.14
@@ -334,10 +336,9 @@ func _update_night_lighting() -> void:
 
 
 # ===========================================================================
-# Night & Quota Settlement Flow
+# Night & Quota Settlement Flow (100% Preserved RPCs + Figma 05_modals Endings)
 # ===========================================================================
 
-## Ends the current daytime immediately and triggers sunset / night settlement
 func end_day_early() -> void:
 	if is_night or is_waiting_for_day_start:
 		return
@@ -349,7 +350,7 @@ func end_day_early() -> void:
 func trigger_night() -> void:
 	if is_night:
 		return
-	if NetworkManager.is_multiplayer_active() and NetworkManager.is_host():
+	if NetworkManager != null and NetworkManager.is_multiplayer_active() and NetworkManager.is_host():
 		_rpc_trigger_night.rpc()
 	_do_trigger_night()
 
@@ -364,7 +365,6 @@ func _do_trigger_night() -> void:
 		return
 	is_night = true
 
-	# Read daily stats from player
 	var items_today: int = 0
 	var sc_today: float = 0.0
 	var total_sc: float = 0.0
@@ -384,67 +384,109 @@ func _do_trigger_night() -> void:
 
 	emit_signal("night_started", current_day, quota_passed)
 
-	var unit_str: String = "SC" if quota_type == QuotaType.SLOP_CREDIT else "items"
-
 	if quota_passed:
-		# SUCCESS CASE
-		if _night_title_label:
-			_night_title_label.text = "🌙 NIGHT HAS FALLEN\n✅ Day %d Quota Met!" % current_day
-			_night_title_label.add_theme_color_override("font_color", Color(0.35, 1.0, 0.55, 1.0))
-
-		if _night_stats_label:
-			_night_stats_label.text = "🧺 Trash Bagged Today: %d items\n🪙 Daily Earnings: +%.1f SC\n🎯 Quota: %.1f %s (PASSED!)\n💰 Total SlopCredit: %.1f SC" % [items_today, sc_today, target_quota, unit_str, total_sc]
-
-		if _night_next_btn:
-			_night_next_btn.text = "☀️ Start Next Day (Day %d)" % (current_day + 1)
-			_night_next_btn.visible = true
-
-		if _night_retry_btn:
-			_night_retry_btn.visible = false
-		if _night_pay_btn:
-			_night_pay_btn.visible = false
-		if _hud_corner_next_btn:
-			_hud_corner_next_btn.visible = true
-
-		print("DayNightCycle: Quota PASSED (%.1f / %.1f %s). Ready for Next Day." % [current_collected, target_quota, unit_str])
+		_populate_win_screen(items_today, sc_today, current_collected, target_quota, total_sc)
 	else:
-		# FAILURE CASE
 		emit_signal("quota_failed", current_collected, target_quota)
-		var shortfall: float = target_quota - current_collected
-
-		if _night_title_label:
-			_night_title_label.text = "🌙 SUNSET ARRIVED\n❌ Day %d Quota Failed!" % current_day
-			_night_title_label.add_theme_color_override("font_color", Color(1.0, 0.35, 0.35, 1.0))
-
-		if _night_stats_label:
-			_night_stats_label.text = "🧺 Trash Bagged Today: %d items\n🪙 Daily Earnings: +%.1f SC\n🎯 Required Quota: %.1f %s\n⚠️ Short by: %.1f %s!\n💰 Total SlopCredit: %.1f SC" % [items_today, sc_today, target_quota, unit_str, shortfall, unit_str, total_sc]
-
-		if _night_next_btn:
-			_night_next_btn.visible = false
-
-		if _night_retry_btn:
-			_night_retry_btn.text = "🔄 Retry Day %d" % current_day
-			_night_retry_btn.visible = true
-
-		# Allow paying off the deficit if player has enough accumulated SlopCredit
-		if _night_pay_btn:
-			if quota_type == QuotaType.SLOP_CREDIT and total_sc >= shortfall:
-				_night_pay_btn.text = "💸 Pay Shortfall (-%.1f SC) & Continue" % shortfall
-				_night_pay_btn.visible = true
-			else:
-				_night_pay_btn.visible = false
-
-		if _hud_corner_next_btn:
-			_hud_corner_next_btn.visible = false
-
-		print("DayNightCycle: Quota FAILED (%.1f / %.1f %s). Player must retry or pay shortfall." % [current_collected, target_quota, unit_str])
+		_populate_lose_screen(items_today, sc_today, current_collected, target_quota, total_sc)
 
 	_show_night_modal()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 
 
+func _populate_win_screen(items_today: int, sc_today: float, collected: float, target: float, total_sc: float) -> void:
+	var unit_str := "SC" if quota_type == QuotaType.SLOP_CREDIT else "KG"
+	if is_instance_valid(_win_root):
+		_win_root.visible = true
+	if is_instance_valid(_lose_root):
+		_lose_root.visible = false
+
+	var is_final := (current_day >= MAX_DAYS)
+	if is_instance_valid(_win_header_label):
+		_win_header_label.text = "MOUNTAIN CLEARED!" if is_final else "SHIFT COMPLETE!"
+	if is_instance_valid(_win_sub_label):
+		_win_sub_label.text = "Laporan Shift — Hari %d dari %d" % [current_day, MAX_DAYS]
+	if is_instance_valid(_win_big_earn_label):
+		_win_big_earn_label.text = "+$%.1f SC" % sc_today
+
+	var vals := [
+		"%d ITEM" % items_today,
+		"+$%.1f SC" % sc_today,
+		"%.1f / %.1f %s  ✓" % [collected, target, unit_str],
+		"$%.1f SC" % total_sc,
+	]
+	for i in range(min(vals.size(), _win_row_vals.size())):
+		if is_instance_valid(_win_row_vals[i]):
+			_win_row_vals[i].text = vals[i]
+
+	if is_instance_valid(_night_next_btn):
+		_night_next_btn.text = "LANJUT DAY %d  ➔" % (current_day + 1)
+		_night_next_btn.visible = true
+	if is_instance_valid(_night_retry_btn):
+		_night_retry_btn.visible = false
+	if is_instance_valid(_night_pay_btn):
+		_night_pay_btn.visible = false
+	if is_instance_valid(_hud_corner_next_btn):
+		_hud_corner_next_btn.visible = true
+
+
+func _populate_lose_screen(items_today: int, sc_today: float, collected: float, target: float, total_sc: float) -> void:
+	var unit_str := "SC" if quota_type == QuotaType.SLOP_CREDIT else "KG"
+	var shortfall: float = maxf(0.0, target - collected)
+	var pct: float = clampf((collected / maxf(1.0, target)) * 100.0, 0.0, 100.0)
+
+	if is_instance_valid(_win_root):
+		_win_root.visible = false
+	if is_instance_valid(_lose_root):
+		_lose_root.visible = true
+
+	if is_instance_valid(_lose_sub_label):
+		_lose_sub_label.text = "Penutupan Sementara — Hari %d dari %d" % [current_day, MAX_DAYS]
+	if is_instance_valid(_lose_deficit_label):
+		_lose_deficit_label.text = "%.1f / %.1f %s (%d%%)" % [collected, target, unit_str, int(pct)]
+	if is_instance_valid(_lose_deficit_bar):
+		_lose_deficit_bar.value = pct
+
+	var vals := [
+		"%d ITEM" % items_today,
+		"+$%.1f SC" % sc_today,
+		"-%.1f %s" % [shortfall, unit_str],
+		"$%.1f SC" % total_sc,
+	]
+	for i in range(min(vals.size(), _lose_row_vals.size())):
+		if is_instance_valid(_lose_row_vals[i]):
+			_lose_row_vals[i].text = vals[i]
+
+	if is_instance_valid(_night_next_btn):
+		_night_next_btn.visible = false
+	if is_instance_valid(_night_retry_btn):
+		_night_retry_btn.text = "COBA LAGI (DAY %d)  ➔" % current_day
+		_night_retry_btn.visible = true
+	if is_instance_valid(_night_pay_btn):
+		if quota_type == QuotaType.SLOP_CREDIT and total_sc >= shortfall and shortfall > 0.0:
+			_night_pay_btn.text = "BAYAR DEFISIT (-$%.1f SC)" % shortfall
+			_night_pay_btn.visible = true
+		else:
+			_night_pay_btn.visible = false
+	if is_instance_valid(_hud_corner_next_btn):
+		_hud_corner_next_btn.visible = false
+
+
+## Preview helpers for visual verification in Godot
+func preview_win_screen(items: int = 18, sc_today: float = 24.5, target: float = 15.0, total_sc: float = 38.0) -> void:
+	is_night = true
+	_populate_win_screen(items, sc_today, sc_today, target, total_sc)
+	_show_night_modal(false)
+
+
+func preview_gameover_screen(items: int = 4, sc_today: float = 6.0, target: float = 15.0, total_sc: float = 22.0) -> void:
+	is_night = true
+	_populate_lose_screen(items, sc_today, sc_today, target, total_sc)
+	_show_night_modal(false)
+
+
 func advance_to_next_day() -> void:
-	if NetworkManager.is_multiplayer_active() and NetworkManager.is_host():
+	if NetworkManager != null and NetworkManager.is_multiplayer_active() and NetworkManager.is_host():
 		_rpc_advance_to_next_day.rpc()
 	_do_advance_to_next_day()
 
@@ -469,7 +511,7 @@ func _do_advance_to_next_day() -> void:
 
 
 func retry_current_day() -> void:
-	if NetworkManager.is_multiplayer_active() and NetworkManager.is_host():
+	if NetworkManager != null and NetworkManager.is_multiplayer_active() and NetworkManager.is_host():
 		_rpc_retry_current_day.rpc()
 	_do_retry_current_day()
 
@@ -498,12 +540,26 @@ func pay_shortfall_and_advance() -> void:
 	if player and "slop_credit" in player:
 		var target := get_current_quota()
 		var collected := get_daily_progress_amount()
-		var shortfall := target - collected
+		var shortfall := maxf(0.0, target - collected)
 		if player.has_method("spend_slop_credit"):
 			player.spend_slop_credit(shortfall)
 		else:
 			player.slop_credit -= shortfall
 	advance_to_next_day()
+
+
+func _go_to_main_menu() -> void:
+	if NetworkManager != null and NetworkManager.is_multiplayer_active():
+		NetworkManager.leave_game()
+	_hide_night_modal()
+	is_waiting_for_day_start = true
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	var existing_title = get_tree().get_first_node_in_group("title_screen")
+	if not existing_title and get_tree().current_scene:
+		var ts_script = load("res://title_screen.gd")
+		if ts_script:
+			var ts = ts_script.new()
+			get_tree().current_scene.add_child(ts)
 
 
 func _on_fade_black_complete() -> void:
@@ -516,7 +572,6 @@ func _on_fade_black_complete() -> void:
 	if event_system:
 		event_system.cleanup_event_entities()
 
-	# Reset player daily stats
 	var player := get_tree().get_first_node_in_group("player")
 	if player and player.has_method("on_new_day_started"):
 		player.on_new_day_started()
@@ -537,7 +592,6 @@ func _on_fade_retry_complete() -> void:
 	if event_system:
 		event_system.cleanup_event_entities()
 
-	# Reset player daily stats for retry
 	var player := get_tree().get_first_node_in_group("player")
 	if player and player.has_method("on_day_retried"):
 		player.on_day_retried()
@@ -550,7 +604,6 @@ func _on_fade_retry_complete() -> void:
 	call_deferred("open_quota_selection")
 
 
-## Opens the Quota/Quest selection screen before the day begins
 func open_quota_selection() -> void:
 	is_waiting_for_day_start = true
 	_apply_lighting(0.0)
@@ -579,29 +632,45 @@ func _on_quota_selection_confirmed(contract_data: Dictionary) -> void:
 	emit_signal("day_started", current_day)
 
 
-
+## Fixed: Never recapture cursor while Contract Board / Night Ending is active!
 func _on_fade_in_complete() -> void:
 	_fade_rect.visible = false
-	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+	var menu_open := is_waiting_for_day_start \
+		or (is_instance_valid(quota_menu) and not quota_menu.is_queued_for_deletion()) \
+		or (_night_modal != null and _night_modal.visible)
+	if menu_open:
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	else:
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
-func _show_night_modal() -> void:
+func _show_night_modal(animate: bool = true) -> void:
+	var hud = get_tree().get_first_node_in_group("game_hud")
+	if hud:
+		hud.visible = false
 	if _night_modal:
 		_night_modal.visible = true
-		_night_modal.modulate.a = 0.0
-		var tw := create_tween()
-		tw.tween_property(_night_modal, "modulate:a", 1.0, 0.4)
+		if animate:
+			_night_modal.modulate.a = 0.0
+			var tw := create_tween()
+			tw.tween_property(_night_modal, "modulate:a", 1.0, 0.35)
+		else:
+			_night_modal.modulate.a = 1.0
+	UIAssets.sync_bgm()
 
 
 func _hide_night_modal() -> void:
 	if _night_modal:
 		_night_modal.visible = false
+	var hud = get_tree().get_first_node_in_group("game_hud")
+	if hud and not is_waiting_for_day_start:
+		hud.visible = true
+	UIAssets.sync_bgm()
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if is_night:
+	if is_night and _night_modal and _night_modal.visible:
 		if event is InputEventKey and event.pressed and not event.echo:
-			# If quota was met, Space / Enter starts next day
 			var collected := get_daily_progress_amount()
 			var target := get_current_quota()
 			var quota_passed: bool = (not quota_enabled) or (collected >= target)
@@ -610,23 +679,23 @@ func _unhandled_input(event: InputEvent) -> void:
 				if event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
 					advance_to_next_day()
 			else:
-				# If quota failed, Space / Enter retries the day
 				if event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
 					retry_current_day()
 
 			if event.keycode == KEY_ESCAPE or event.keycode == KEY_TAB:
-				if _night_modal and _night_modal.visible:
-					_hide_night_modal()
-					Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+				_hide_night_modal()
+				Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 
 
 # ===========================================================================
-# UI Construction (HUD Clock, Quota Bar, Night Settlement Modal)
+# UI Construction (Legacy Hidden HUD Card + Figma 05_modals Win / Game Over)
 # ===========================================================================
 
 func _setup_ui() -> void:
 	_canvas = CanvasLayer.new()
 	_canvas.name = "DayNightUI"
+	_canvas.layer = 30
+	_canvas.process_mode = Node.PROCESS_MODE_ALWAYS
 	add_child(_canvas)
 
 	var root := Control.new()
@@ -634,175 +703,300 @@ func _setup_ui() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_canvas.add_child(root)
 
-	# 1. Top-Right Day/Clock/Quota HUD Card (Replaced by industrial GameHUD)
+	# 1. Legacy Top-Right HUD Card (kept hidden for script compatibility)
 	_hud_card = PanelContainer.new()
-	_hud_card.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_hud_card.position = Vector2(-235, 24)
-	_hud_card.size = Vector2(215, 96)
-	_hud_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hud_card.visible = false
-
-	var card_bg := StyleBoxFlat.new()
-	card_bg.bg_color = Color(0.06, 0.08, 0.12, 0.8)
-	card_bg.border_color = Color(0.25, 0.35, 0.48, 0.7)
-	card_bg.set_border_width_all(2)
-	card_bg.corner_radius_top_left = 8
-	card_bg.corner_radius_top_right = 8
-	card_bg.corner_radius_bottom_left = 8
-	card_bg.corner_radius_bottom_right = 8
-	card_bg.content_margin_left = 12
-	card_bg.content_margin_top = 8
-	card_bg.content_margin_right = 12
-	card_bg.content_margin_bottom = 8
-	_hud_card.add_theme_stylebox_override("panel", card_bg)
+	_hud_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(_hud_card)
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 3)
 	_hud_card.add_child(vbox)
-
-	var hbox_top := HBoxContainer.new()
-	vbox.add_child(hbox_top)
-
 	_hud_day_label = Label.new()
-	_hud_day_label.text = "☀️ Day 1"
-	_hud_day_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.3, 1.0))
-	_hud_day_label.add_theme_font_size_override("font_size", 16)
-	hbox_top.add_child(_hud_day_label)
-
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hbox_top.add_child(spacer)
-
 	_hud_time_label = Label.new()
-	_hud_time_label.text = "06:00 AM"
-	_hud_time_label.add_theme_color_override("font_color", Color(0.85, 0.9, 0.95, 0.9))
-	_hud_time_label.add_theme_font_size_override("font_size", 14)
-	hbox_top.add_child(_hud_time_label)
-
 	_hud_remaining_label = Label.new()
-	_hud_remaining_label.text = "07:00 remaining"
-	_hud_remaining_label.add_theme_color_override("font_color", Color(0.7, 0.75, 0.8, 0.75))
-	_hud_remaining_label.add_theme_font_size_override("font_size", 11)
-	vbox.add_child(_hud_remaining_label)
-
-	# Day progression bar
 	_hud_day_progress = ProgressBar.new()
-	_hud_day_progress.custom_minimum_size = Vector2(188, 4)
-	_hud_day_progress.show_percentage = false
-	_hud_day_progress.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_hud_day_progress.min_value = 0.0
-	_hud_day_progress.max_value = 1.0
-
-	var bar_bg := StyleBoxFlat.new()
-	bar_bg.bg_color = Color(0.1, 0.12, 0.16, 0.8)
-	_hud_day_progress.add_theme_stylebox_override("background", bar_bg)
-
-	var bar_fill := StyleBoxFlat.new()
-	bar_fill.bg_color = Color(1.0, 0.75, 0.25, 0.9)
-	_hud_day_progress.add_theme_stylebox_override("fill", bar_fill)
-	vbox.add_child(_hud_day_progress)
-
-	# Quota label under progress bar
 	_hud_quota_label = Label.new()
-	_hud_quota_label.text = "🎯 Quota: 0.0 / 15.0 SC"
-	_hud_quota_label.add_theme_color_override("font_color", Color(1.0, 0.78, 0.28, 0.95))
-	_hud_quota_label.add_theme_font_size_override("font_size", 12)
+	vbox.add_child(_hud_day_label)
+	vbox.add_child(_hud_time_label)
+	vbox.add_child(_hud_remaining_label)
+	vbox.add_child(_hud_day_progress)
 	vbox.add_child(_hud_quota_label)
 
-	# Corner persistent Next Day button (visible at night if quota passed)
-	_hud_corner_next_btn = Button.new()
-	_hud_corner_next_btn.text = "☀️ Next Day"
+	# Corner persistent Next Day button (visible at night if player explores in dark)
+	_hud_corner_next_btn = UIAssets.create_wood_button(
+		"res://UI/05_modals/btn_modal_blue_wood.png",
+		"LANJUT HARI  ➔", 13, Color(0.20, 0.12, 0.05), "", "black", 4
+	)
 	_hud_corner_next_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_hud_corner_next_btn.position = Vector2(-235, 130)
-	_hud_corner_next_btn.size = Vector2(215, 32)
+	_hud_corner_next_btn.offset_left = -224
+	_hud_corner_next_btn.offset_right = -18
+	_hud_corner_next_btn.offset_top = 194
+	_hud_corner_next_btn.offset_bottom = 250
+	_hud_corner_next_btn.custom_minimum_size = Vector2(206, 56)
 	_hud_corner_next_btn.visible = false
 	_hud_corner_next_btn.pressed.connect(Callable(self, "advance_to_next_day"))
 	root.add_child(_hud_corner_next_btn)
 
-	# 2. Night Settlement Modal (Centered)
-	_night_modal = PanelContainer.new()
-	_night_modal.set_anchors_preset(Control.PRESET_CENTER)
-	_night_modal.position = Vector2(-200, -165)
-	_night_modal.size = Vector2(400, 330)
+	# 2. Full-Screen Night Settlement / Win & Game Over Screens (1280 x 720, Figma 05_modals)
+	_night_modal = Control.new()
+	_night_modal.name = "NightSettlementModal"
+	_night_modal.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_night_modal.mouse_filter = Control.MOUSE_FILTER_STOP
 	_night_modal.visible = false
-
-	var modal_bg := StyleBoxFlat.new()
-	modal_bg.bg_color = Color(0.05, 0.07, 0.11, 0.94)
-	modal_bg.border_color = Color(0.3, 0.45, 0.65, 0.8)
-	modal_bg.set_border_width_all(2)
-	modal_bg.corner_radius_top_left = 12
-	modal_bg.corner_radius_top_right = 12
-	modal_bg.corner_radius_bottom_left = 12
-	modal_bg.corner_radius_bottom_right = 12
-	modal_bg.content_margin_left = 24
-	modal_bg.content_margin_top = 20
-	modal_bg.content_margin_right = 24
-	modal_bg.content_margin_bottom = 20
-	_night_modal.add_theme_stylebox_override("panel", modal_bg)
 	root.add_child(_night_modal)
 
-	var m_vbox := VBoxContainer.new()
-	m_vbox.add_theme_constant_override("separation", 12)
-	_night_modal.add_child(m_vbox)
+	var modal_bg := ColorRect.new()
+	modal_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	modal_bg.color = Color(0.04, 0.05, 0.08, 1.0)
+	_night_modal.add_child(modal_bg)
 
-	_night_title_label = Label.new()
-	_night_title_label.text = "🌙 NIGHT HAS FALLEN\nDay 1 Complete"
-	_night_title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_night_title_label.add_theme_color_override("font_color", Color(0.5, 0.75, 1.0, 1.0))
-	_night_title_label.add_theme_font_size_override("font_size", 20)
-	m_vbox.add_child(_night_title_label)
+	var modal_content := UIAssets.create_canvas_root(_night_modal, "ResultCanvas")
 
-	_night_stats_label = Label.new()
-	_night_stats_label.text = "🧺 Trash Bagged Today: 0\n🪙 SlopCredit Earned Today: +0.0 SC\n💰 Total SlopCredit: 0.0 SC"
-	_night_stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_night_stats_label.add_theme_color_override("font_color", Color(0.85, 0.9, 0.95, 0.9))
-	_night_stats_label.add_theme_font_size_override("font_size", 14)
-	m_vbox.add_child(_night_stats_label)
+	# --- A. WIN / SHIFT COMPLETE VIEW ---
+	_win_root = Control.new()
+	_win_root.name = "WinScreen"
+	_win_root.size = Vector2(1280, 720)
+	_win_root.visible = false
+	modal_content.add_child(_win_root)
 
-	# Next Day Button (Enabled on success)
-	_night_next_btn = Button.new()
-	_night_next_btn.text = "☀️ Start Next Day"
-	_night_next_btn.custom_minimum_size = Vector2(0, 42)
-	_night_next_btn.add_theme_font_size_override("font_size", 16)
-	_night_next_btn.add_theme_color_override("font_color", Color(1.0, 0.9, 0.4, 1.0))
+	var win_bg := UIAssets.create_texture_rect("res://UI/05_modals/bg_win_sunrise.png")
+	win_bg.position = Vector2.ZERO
+	win_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_win_root.add_child(win_bg)
+
+	var win_hdr := UIAssets.create_texture_rect("res://UI/05_modals/header_slab_gold_win.png")
+	win_hdr.position = Vector2(400, 26)
+	win_hdr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_win_root.add_child(win_hdr)
+
+	_win_header_label = UIAssets.create_label(
+		"SHIFT COMPLETE!", 24, Color.WHITE, "black",
+		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER, 0.55
+	)
+	_win_header_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	win_hdr.add_child(_win_header_label)
+
+	# Victory Certificate Torn Paper (PNG 612x534, logical 580x492 at (350, 108))
+	var win_paper_tex := UIAssets.create_texture_rect("res://UI/05_modals/paper_cert_win_empty.png")
+	win_paper_tex.position = Vector2(334, 92)
+	win_paper_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_win_root.add_child(win_paper_tex)
+
+	var win_paper := Control.new()
+	win_paper.position = Vector2(350, 108)
+	win_paper.size = Vector2(580, 492)
+	_win_root.add_child(win_paper)
+
+	_win_sub_label = UIAssets.create_label(
+		"Laporan Shift — Hari 1 dari 8", 18, Color(0.24, 0.16, 0.08), "extrabold",
+		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
+	)
+	_win_sub_label.position = Vector2(32, 30)
+	_win_sub_label.size = Vector2(516, 28)
+	win_paper.add_child(_win_sub_label)
+
+	_win_big_earn_label = UIAssets.create_label("+$0.0 SC", 38, UIAssets.COL_GREEN, "black")
+	_win_big_earn_label.position = Vector2(36, 102)
+	_win_big_earn_label.size = Vector2(310, 52)
+	win_paper.add_child(_win_big_earn_label)
+
+	# Authentic Angled Green Rubber Ink Stamp (Matching Figma Stamp-Shift-Selesai 188:88)
+	var stamp_ink := Color(0.114, 0.369, 0.220)
+	var win_stamp := Panel.new()
+	win_stamp.position = Vector2(390, 108)
+	win_stamp.size = Vector2(154, 34)
+	win_stamp.pivot_offset = win_stamp.size * 0.5
+	win_stamp.rotation_degrees = -2.0
+	var wssb := StyleBoxFlat.new()
+	wssb.bg_color = Color(0.114, 0.369, 0.220, 0.10)
+	wssb.border_color = stamp_ink
+	wssb.set_border_width_all(2)
+	wssb.set_corner_radius_all(0)
+	win_stamp.add_theme_stylebox_override("panel", wssb)
+	win_paper.add_child(win_stamp)
+
+	var ws_lbl := UIAssets.create_label(
+		"✓  LULUS KUOTA", 13, stamp_ink, "black",
+		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
+	)
+	ws_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	win_stamp.add_child(ws_lbl)
+
+	# 4 Victory Stats Rows (aligned to ruled paper lines)
+	_win_row_vals.clear()
+	var win_keys := ["Sampah Terkumpul", "Hasil Hari Ini", "Target Kuota", "Total Saldo"]
+	var win_ys := [218.0, 266.0, 314.0, 362.0]
+	for i in range(4):
+		var k_lbl := UIAssets.create_label(win_keys[i], 13, UIAssets.COL_INK_MUTED, "bold")
+		k_lbl.position = Vector2(36, win_ys[i])
+		k_lbl.size = Vector2(220, 24)
+		win_paper.add_child(k_lbl)
+
+		var v_col := UIAssets.COL_GREEN if i == 2 else (Color(0.68, 0.44, 0.04) if i == 3 else UIAssets.COL_INK)
+		var v_lbl := UIAssets.create_label("-", 15, v_col, "black", HORIZONTAL_ALIGNMENT_RIGHT)
+		v_lbl.position = Vector2(256, win_ys[i])
+		v_lbl.size = Vector2(288, 24)
+		win_paper.add_child(v_lbl)
+		_win_row_vals.append(v_lbl)
+
+	# Win Bottom Buttons
+	_night_next_btn = UIAssets.create_wood_button(
+		"res://UI/05_modals/btn_ending_blue_wood.png",
+		"LANJUT DAY 2  ➔", 16, Color(0.20, 0.12, 0.05), "", "black", 5
+	)
+	_night_next_btn.position = Vector2(334, 616)
 	_night_next_btn.pressed.connect(Callable(self, "advance_to_next_day"))
-	m_vbox.add_child(_night_next_btn)
+	_win_root.add_child(_night_next_btn)
 
-	# Retry Day Button (Visible on quota failure)
-	_night_retry_btn = Button.new()
-	_night_retry_btn.text = "🔄 Retry Day"
-	_night_retry_btn.custom_minimum_size = Vector2(0, 40)
-	_night_retry_btn.add_theme_font_size_override("font_size", 15)
-	_night_retry_btn.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45, 1.0))
-	_night_retry_btn.visible = false
-	_night_retry_btn.pressed.connect(Callable(self, "retry_current_day"))
-	m_vbox.add_child(_night_retry_btn)
+	var win_menu_btn := UIAssets.create_wood_button(
+		"res://UI/05_modals/btn_ending_brown_wood.png",
+		"MAIN MENU", 16, UIAssets.COL_CREAM, "", "black", 5
+	)
+	win_menu_btn.position = Vector2(634, 616)
+	win_menu_btn.pressed.connect(Callable(self, "_go_to_main_menu"))
+	_win_root.add_child(win_menu_btn)
 
-	# Pay Shortfall Button (Visible on failure if player has enough total balance)
-	_night_pay_btn = Button.new()
-	_night_pay_btn.text = "💸 Pay Shortfall & Continue"
-	_night_pay_btn.custom_minimum_size = Vector2(0, 34)
-	_night_pay_btn.add_theme_font_size_override("font_size", 13)
-	_night_pay_btn.add_theme_color_override("font_color", Color(1.0, 0.8, 0.3, 1.0))
+	# Subtle Explore button top-right
+	_night_explore_btn = Button.new()
+	_night_explore_btn.text = "Explore Malam [TAB]"
+	_night_explore_btn.position = Vector2(1070, 28)
+	_night_explore_btn.size = Vector2(180, 32)
+	_night_explore_btn.flat = true
+	_night_explore_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_night_explore_btn.add_theme_font_override("font", UIAssets.get_font("mono"))
+	_night_explore_btn.add_theme_font_size_override("font_size", 11)
+	_night_explore_btn.add_theme_color_override("font_color", Color(0.95, 0.92, 0.85, 0.80))
+	_night_explore_btn.pressed.connect(Callable(self, "_on_explore_night_pressed"))
+	_win_root.add_child(_night_explore_btn)
+
+	# --- B. GAME OVER / PARK CLOSED VIEW ---
+	_lose_root = Control.new()
+	_lose_root.name = "GameOverScreen"
+	_lose_root.size = Vector2(1280, 720)
+	_lose_root.visible = false
+	modal_content.add_child(_lose_root)
+
+	var lose_bg := UIAssets.create_texture_rect("res://UI/05_modals/bg_gameover_closed.png")
+	lose_bg.position = Vector2.ZERO
+	lose_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lose_root.add_child(lose_bg)
+
+	var lose_hdr := UIAssets.create_texture_rect("res://UI/05_modals/header_slab_hazard_lose.png")
+	lose_hdr.position = Vector2(400, 26)
+	lose_hdr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lose_root.add_child(lose_hdr)
+
+	var lose_hdr_lbl := UIAssets.create_label(
+		"PARK CLOSED", 24, Color.WHITE, "black",
+		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER, 0.55
+	)
+	lose_hdr_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	lose_hdr.add_child(lose_hdr_lbl)
+
+	# Crimson Failure Notice Paper (PNG 612x534, logical 580x492 at (350, 108))
+	var lose_paper_tex := UIAssets.create_texture_rect("res://UI/05_modals/paper_notice_lose_empty.png")
+	lose_paper_tex.position = Vector2(334, 92)
+	lose_paper_tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lose_root.add_child(lose_paper_tex)
+
+	var lose_paper := Control.new()
+	lose_paper.position = Vector2(350, 108)
+	lose_paper.size = Vector2(580, 492)
+	_lose_root.add_child(lose_paper)
+
+	_lose_sub_label = UIAssets.create_label(
+		"Penutupan Sementara — Hari 1 dari 8", 18, UIAssets.COL_CRIMSON, "extrabold",
+		HORIZONTAL_ALIGNMENT_CENTER, VERTICAL_ALIGNMENT_CENTER
+	)
+	_lose_sub_label.position = Vector2(32, 30)
+	_lose_sub_label.size = Vector2(516, 28)
+	lose_paper.add_child(_lose_sub_label)
+
+	# Bolted Quota Deficit Progress Tank (516 x 64)
+	var def_bg := UIAssets.create_texture_rect("res://UI/05_modals/quota_deficit_bar_bg.png")
+	def_bg.position = Vector2(32, 86)
+	def_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lose_paper.add_child(def_bg)
+
+	var def_title := UIAssets.create_label("Progres Kuota", 11, Color(0.82, 0.84, 0.88), "bold")
+	def_title.position = Vector2(20, 8)
+	def_title.size = Vector2(220, 16)
+	def_bg.add_child(def_title)
+
+	_lose_deficit_label = UIAssets.create_label(
+		"0.0 / 15.0 SC (0%)", 11, UIAssets.COL_CRIMSON_HI, "bold",
+		HORIZONTAL_ALIGNMENT_RIGHT, VERTICAL_ALIGNMENT_CENTER
+	)
+	_lose_deficit_label.position = Vector2(246, 8)
+	_lose_deficit_label.size = Vector2(250, 16)
+	def_bg.add_child(_lose_deficit_label)
+
+	_lose_deficit_bar = TextureProgressBar.new()
+	_lose_deficit_bar.position = Vector2(20, 34)
+	_lose_deficit_bar.size = Vector2(476, 14)
+	_lose_deficit_bar.min_value = 0.0
+	_lose_deficit_bar.max_value = 100.0
+	_lose_deficit_bar.value = 0.0
+	_lose_deficit_bar.texture_progress = UIAssets.get_tex("res://UI/05_modals/quota_deficit_bar_fill.png")
+	def_bg.add_child(_lose_deficit_bar)
+
+	# 4 Failure Stats Rows (aligned to ruled paper lines)
+	_lose_row_vals.clear()
+	var lose_keys := ["Sampah Terkumpul", "Hasil Hari Ini", "Kekurangan Kuota", "Total Saldo"]
+	var lose_ys := [218.0, 266.0, 314.0, 362.0]
+	for i in range(4):
+		var k_lbl := UIAssets.create_label(lose_keys[i], 13, UIAssets.COL_INK_MUTED, "bold")
+		k_lbl.position = Vector2(36, lose_ys[i])
+		k_lbl.size = Vector2(220, 24)
+		lose_paper.add_child(k_lbl)
+
+		var v_col := UIAssets.COL_CRIMSON if i == 2 else UIAssets.COL_INK
+		var v_lbl := UIAssets.create_label("-", 15, v_col, "black", HORIZONTAL_ALIGNMENT_RIGHT)
+		v_lbl.position = Vector2(256, lose_ys[i])
+		v_lbl.size = Vector2(288, 24)
+		lose_paper.add_child(v_lbl)
+		_lose_row_vals.append(v_lbl)
+
+	# Optional Pay Shortfall Button inside paper footer
+	_night_pay_btn = UIAssets.create_wood_button(
+		"res://UI/05_modals/btn_ending_blue_wood.png",
+		"BAYAR DEFISIT & LANJUT", 14, Color(0.20, 0.12, 0.05), "", "black", 5
+	)
+	_night_pay_btn.position = Vector2(134, 396)
 	_night_pay_btn.visible = false
 	_night_pay_btn.pressed.connect(Callable(self, "pay_shortfall_and_advance"))
-	m_vbox.add_child(_night_pay_btn)
+	lose_paper.add_child(_night_pay_btn)
 
-	_night_explore_btn = Button.new()
-	_night_explore_btn.text = "Explore in the Dark (Dismiss)"
-	_night_explore_btn.custom_minimum_size = Vector2(0, 26)
-	_night_explore_btn.add_theme_font_size_override("font_size", 12)
-	_night_explore_btn.pressed.connect(Callable(self, "_on_explore_night_pressed"))
-	m_vbox.add_child(_night_explore_btn)
+	# Lose Bottom Buttons
+	_night_retry_btn = UIAssets.create_wood_button(
+		"res://UI/05_modals/btn_ending_red_wood.png",
+		"COBA LAGI (DAY 1)  ➔", 16, Color.WHITE, "", "black", 5
+	)
+	_night_retry_btn.position = Vector2(334, 616)
+	_night_retry_btn.pressed.connect(Callable(self, "retry_current_day"))
+	_lose_root.add_child(_night_retry_btn)
 
-	# 3. Fullscreen Fade Transition Rect
+	var lose_menu_btn := UIAssets.create_wood_button(
+		"res://UI/05_modals/btn_ending_brown_wood.png",
+		"MAIN MENU", 16, UIAssets.COL_CREAM, "", "black", 5
+	)
+	lose_menu_btn.position = Vector2(634, 616)
+	lose_menu_btn.pressed.connect(Callable(self, "_go_to_main_menu"))
+	_lose_root.add_child(lose_menu_btn)
+
+	# 3. Fullscreen Fade Transition Layer (on top of everything)
+	_fade_canvas = CanvasLayer.new()
+	_fade_canvas.name = "DayNightFadeLayer"
+	_fade_canvas.layer = 90
+	_fade_canvas.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(_fade_canvas)
+
 	_fade_rect = ColorRect.new()
 	_fade_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_fade_rect.color = Color(0.0, 0.0, 0.0, 1.0)
 	_fade_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fade_rect.visible = false
-	root.add_child(_fade_rect)
+	_fade_canvas.add_child(_fade_rect)
 
 
 func _on_explore_night_pressed() -> void:
@@ -816,52 +1010,21 @@ func _update_hud(progress: float) -> void:
 
 	var collected := get_daily_progress_amount()
 	var target := get_current_quota()
-	var unit_str := "SC" if quota_type == QuotaType.SLOP_CREDIT else "items"
 
-	# Update Quota Display
 	if is_instance_valid(_hud_quota_label):
 		if not quota_enabled:
 			_hud_quota_label.text = "Quota: Disabled"
-			_hud_quota_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7, 0.7))
 		elif collected >= target:
-			if quota_type == QuotaType.SLOP_CREDIT:
-				_hud_quota_label.text = "✅ Quota Met: %.1f / %.1f SC" % [collected, target]
-			else:
-				_hud_quota_label.text = "✅ Quota Met: %d / %d items" % [int(collected), int(target)]
-			_hud_quota_label.add_theme_color_override("font_color", Color(0.35, 1.0, 0.55, 1.0))
+			_hud_quota_label.text = "✅ Quota Met: %.1f / %.1f" % [collected, target]
 		else:
-			var pct: int = int(clampf(collected / target, 0.0, 1.0) * 100.0)
-			if quota_type == QuotaType.SLOP_CREDIT:
-				_hud_quota_label.text = "🎯 Quota: %.1f / %.1f SC (%d%%)" % [collected, target, pct]
-			else:
-				_hud_quota_label.text = "🎯 Quota: %d / %d (%d%%)" % [int(collected), int(target), pct]
-			_hud_quota_label.add_theme_color_override("font_color", Color(1.0, 0.78, 0.28, 0.95))
+			var pct: int = int(clampf(collected / maxf(1.0, target), 0.0, 1.0) * 100.0)
+			_hud_quota_label.text = "🎯 Quota: %.1f / %.1f (%d%%)" % [collected, target, pct]
 
 	if not is_night:
 		_hud_day_label.text = "☀️ Day %d" % current_day
-		_hud_day_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.3, 1.0))
-
-		var clock_hour: float = lerpf(sunrise_hour, sunset_hour, progress)
-		var hour_int: int = int(clock_hour)
-		var minute_int: int = int((clock_hour - hour_int) * 60.0)
-		var am_pm: String = "AM" if hour_int < 12 else "PM"
-		var display_hour: int = hour_int if hour_int <= 12 else hour_int - 12
-		if display_hour == 0:
-			display_hour = 12
-
-		_hud_time_label.text = "%02d:%02d %s" % [display_hour, minute_int, am_pm]
-
-		var remaining_seconds: float = maxf(0.0, day_duration_seconds - day_elapsed_seconds)
-		var rem_min: int = int(remaining_seconds / 60.0)
-		var rem_sec: int = int(remaining_seconds) % 60
-		_hud_remaining_label.text = "%02d:%02d remaining" % [rem_min, rem_sec]
-
 		_hud_day_progress.value = progress
 	else:
 		_hud_day_label.text = "🌙 Night %d" % current_day
-		_hud_day_label.add_theme_color_override("font_color", Color(0.45, 0.75, 1.0, 1.0))
-		_hud_time_label.text = "Nightfall"
-		_hud_remaining_label.text = "Waiting for Next Day"
 		_hud_day_progress.value = 1.0
 
 
