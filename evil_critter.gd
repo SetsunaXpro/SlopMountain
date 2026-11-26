@@ -263,13 +263,19 @@ func die() -> void:
 	_hp_label.text = "☠️ DEFEATED!"
 	_hp_label.modulate = Color(0.4, 1.0, 0.4)
 
-	# Award bonus SlopCredits to player
+	# Award bonus SlopCredits to player & daily quota tracking
+	if not is_instance_valid(_player_ref):
+		_player_ref = _get_nearest_player()
 	if is_instance_valid(_player_ref) and "slop_credit" in _player_ref:
 		_player_ref.slop_credit += 22.0
+		if "daily_sc_earned" in _player_ref:
+			_player_ref.daily_sc_earned += 22.0
 		if _player_ref.has_signal("slop_credit_changed"):
 			_player_ref.slop_credit_changed.emit(_player_ref.slop_credit, 22.0)
 		if _player_ref.has_method("_show_feedback"):
 			_player_ref._show_feedback("🏆 HUNT COMPLETE! Feral Pest Defeated! (+$22 SC)")
+		if NetworkManager != null:
+			NetworkManager.broadcast_team_sc(22.0)
 
 	# Shrink / explode animation
 	var tw := create_tween()

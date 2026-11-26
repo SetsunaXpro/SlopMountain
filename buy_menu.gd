@@ -592,25 +592,41 @@ func _apply_perk_effect(perk_id: String) -> void:
 	if _player == null:
 		return
 
-	if "owned_perks" in _player and not (perk_id in _player.owned_perks):
-		_player.owned_perks.append(perk_id)
+	var already_owned := false
+	if "owned_perks" in _player:
+		already_owned = (perk_id in _player.owned_perks)
+		if not already_owned:
+			_player.owned_perks.append(perk_id)
+	if already_owned:
+		return
 
 	match perk_id:
 		"hivis_vest":
-			if "streak_mult_bonus" in _player:
-				_player.streak_mult_bonus += 0.15
+			if "extra_mult_per_item" in _player:
+				_player.extra_mult_per_item += 0.15
+			var hud = get_tree().get_first_node_in_group("game_hud")
+			if hud and hud.has_method("update_streak") and "current_streak" in hud:
+				hud.update_streak(hud.current_streak)
 		"can_crusher":
-			if "metal_weight_mult" in _player:
-				_player.metal_weight_mult = 1.5
+			if "metal_weight_multiplier" in _player:
+				_player.metal_weight_multiplier = maxf(float(_player.metal_weight_multiplier), 1.5)
 		"piggy_jar":
-			if "has_piggy_bank" in _player:
-				_player.has_piggy_bank = true
+			if "piggy_jar_active" in _player:
+				_player.piggy_jar_active = true
 		"speed_boots":
-			if "speed_bonus" in _player:
-				_player.speed_bonus += 0.20
+			if "base_speed" in _player:
+				_player.base_speed *= 1.2
+			if "sprint_speed" in _player:
+				_player.sprint_speed *= 1.2
 		"magnet_glove":
-			if "pickup_range" in _player:
-				_player.pickup_range += 2.0
+			if "pickup_range_bonus" in _player:
+				_player.pickup_range_bonus += 2.0
+			if "pickup_distance" in _player:
+				_player.pickup_distance += 2.0
+				if "pickup_ray" in _player and is_instance_valid(_player.pickup_ray):
+					_player.pickup_ray.target_position = Vector3(0, 0, -float(_player.pickup_distance))
 		"big_bag":
-			if "bag_capacity" in _player:
-				_player.bag_capacity += 10
+			if "max_bag_capacity" in _player and int(_player.max_bag_capacity) > 0:
+				_player.max_bag_capacity += 10
+			if _player.has_method("_update_hud"):
+				_player._update_hud()

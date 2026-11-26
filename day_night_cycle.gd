@@ -112,6 +112,34 @@ func set_game_mode(mode: int) -> void:
 		event_system.set_game_mode(mode)
 
 
+func reset_for_new_run(mode: int = 0) -> void:
+	current_day = 1
+	day_elapsed_seconds = 0.0
+	is_night = false
+	_can_advance_night = false
+	_quota_toast_triggered = false
+	custom_day_quota = -1.0
+	is_waiting_for_day_start = true
+	_hide_night_modal()
+	_sync_corner_next_btn()
+
+	if event_system:
+		if event_system.has_method("cleanup_event_entities"):
+			event_system.cleanup_event_entities()
+		event_system.is_event_completed = false
+		event_system.event_progress = 0.0
+	set_game_mode(mode)
+
+	var player := get_tree().get_first_node_in_group("player")
+	if player and player.has_method("reset_for_new_run"):
+		player.reset_for_new_run()
+	var hud := get_tree().get_first_node_in_group("game_hud")
+	if hud and hud.has_method("update_streak"):
+		hud.update_streak(0)
+
+	_apply_lighting(0.0)
+
+
 func _ready() -> void:
 	add_to_group("day_night_cycle")
 	UIAssets.load_and_apply_settings()
@@ -183,13 +211,42 @@ func _find_first_node_of_type(root: Node, type_str: String) -> Node:
 	return null
 
 
+func _is_objective_event_active() -> bool:
+	return event_system != null and bool(event_system.is_event_active) and str(event_system.active_event_id) != "inspection_day"
+
+
+func get_quota_unit() -> String:
+	if _is_objective_event_active():
+		match str(event_system.active_event_id):
+			"expedition":
+				return "FLAG"
+			"make_peace":
+				return "TAME"
+			"open_season":
+				return "PEST"
+			"gold_rush":
+				return "SC"
+			"evernight":
+				return "DMG"
+	return "SC" if quota_type == QuotaType.SLOP_CREDIT else "KG"
+
+
 func get_current_quota() -> float:
+	if _is_objective_event_active():
+		var eid := str(event_system.active_event_id)
+		if eid == "make_peace" or eid == "open_season":
+			return 2.0
+		return maxf(1.0, float(event_system.event_target))
 	if custom_day_quota >= 0.0:
 		return custom_day_quota
 	return maxf(1.0, base_quota + float(current_day - 1) * quota_increase_per_day)
 
 
 func get_daily_progress_amount() -> float:
+	if _is_objective_event_active():
+		if bool(event_system.is_event_completed):
+			return get_current_quota()
+		return maxf(0.0, float(event_system.event_progress))
 	var player := get_tree().get_first_node_in_group("player")
 	if player:
 		if quota_type == QuotaType.SLOP_CREDIT and "daily_sc_earned" in player:
@@ -197,6 +254,14 @@ func get_daily_progress_amount() -> float:
 		elif quota_type == QuotaType.ITEM_COUNT and "daily_items_bagged" in player:
 			return float(player.daily_items_bagged)
 	return 0.0
+
+
+func is_daily_quota_met() -> bool:
+	if _is_objective_event_active():
+		return bool(event_system.is_event_completed)
+	if not quota_enabled:
+		return true
+	return get_daily_progress_amount() >= get_current_quota()
 
 
 func _has_active_menu_in_group(group_name: String) -> bool:
@@ -272,14 +337,14 @@ func _process(delta: float) -> void:
 		_update_hud(progress)
 
 		if quota_enabled and not _quota_toast_triggered:
-			var collected := get_daily_progress_amount()
-			var target := get_current_quota()
-			if collected >= target:
+			if is_daily_quota_met():
+				var collected := get_daily_progress_amount()
+				var target := get_current_quota()
 				_quota_toast_triggered = true
 				emit_signal("quota_achieved", target)
 				var player := get_tree().get_first_node_in_group("player")
 				if player and player.has_method("_show_feedback"):
-					player._show_feedback("🎉 Sunset Quota Met! (%.1f reached)" % collected)
+					player._show_feedback("🎉 Sunset Quota Met! (%.1f %s reached)" % [collected, get_quota_unit()])
 
 		if is_host and day_elapsed_seconds >= day_duration_seconds:
 			trigger_night()
@@ -412,6 +477,8 @@ func _do_trigger_night() -> void:
 
 	var player := get_tree().get_first_node_in_group("player")
 	if player:
+		if "is_building" in player and player.is_building and player.has_method("cancel_build_mode"):
+			player.cancel_build_mode()
 		if "daily_items_bagged" in player:
 			items_today = player.daily_items_bagged
 		if "daily_sc_earned" in player:
@@ -420,8 +487,8 @@ func _do_trigger_night() -> void:
 			total_sc = player.slop_credit
 
 	var target_quota: float = get_current_quota()
-	var current_collected: float = sc_today if quota_type == QuotaType.SLOP_CREDIT else float(items_today)
-	var quota_passed: bool = (not quota_enabled) or (current_collected >= target_quota)
+	var current_collected: float = get_daily_progress_amount()
+	var quota_passed: bool = is_daily_quota_met()
 
 	emit_signal("night_started", current_day, quota_passed)
 
@@ -436,7 +503,7 @@ func _do_trigger_night() -> void:
 
 
 func _populate_win_screen(items_today: int, sc_today: float, collected: float, target: float, total_sc: float) -> void:
-	var unit_str := "SC" if quota_type == QuotaType.SLOP_CREDIT else "KG"
+	var unit_str := get_quota_unit()
 	if is_instance_valid(_win_root):
 		_win_root.visible = true
 	if is_instance_valid(_lose_root):
@@ -472,7 +539,7 @@ func _populate_win_screen(items_today: int, sc_today: float, collected: float, t
 
 
 func _populate_lose_screen(items_today: int, sc_today: float, collected: float, target: float, total_sc: float) -> void:
-	var unit_str := "SC" if quota_type == QuotaType.SLOP_CREDIT else "KG"
+	var unit_str := get_quota_unit()
 	var shortfall: float = maxf(0.0, target - collected)
 	var pct: float = clampf((collected / maxf(1.0, target)) * 100.0, 0.0, 100.0)
 
@@ -504,7 +571,8 @@ func _populate_lose_screen(items_today: int, sc_today: float, collected: float, 
 		_night_retry_btn.text = "COBA LAGI (DAY %d)  ➔" % current_day
 		_night_retry_btn.visible = true
 	if is_instance_valid(_night_pay_btn):
-		if quota_type == QuotaType.SLOP_CREDIT and total_sc >= shortfall and shortfall > 0.0:
+		var can_pay_sc := (not _is_objective_event_active()) and quota_type == QuotaType.SLOP_CREDIT and total_sc >= shortfall and shortfall > 0.0
+		if can_pay_sc:
 			_night_pay_btn.text = "BAYAR DEFISIT (-$%.1f SC)" % shortfall
 			_night_pay_btn.visible = true
 		else:
@@ -714,9 +782,7 @@ func _hide_night_modal() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if is_night and _night_modal and _night_modal.visible:
 		if event is InputEventKey and event.pressed and not event.echo:
-			var collected := get_daily_progress_amount()
-			var target := get_current_quota()
-			var quota_passed: bool = (not quota_enabled) or (collected >= target)
+			var quota_passed: bool = is_daily_quota_met()
 
 			if event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
 				get_viewport().set_input_as_handled()
@@ -726,7 +792,7 @@ func _unhandled_input(event: InputEvent) -> void:
 					retry_current_day()
 				return
 
-			if event.keycode == KEY_ESCAPE or event.keycode == KEY_TAB:
+			if quota_passed and (event.keycode == KEY_ESCAPE or event.keycode == KEY_TAB):
 				get_viewport().set_input_as_handled()
 				_hide_night_modal()
 				_capture_player_mouse()

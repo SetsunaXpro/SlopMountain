@@ -730,7 +730,9 @@ func _launch_game(mode: int) -> void:
 	tw.tween_callback(func():
 		var dnc = get_tree().get_first_node_in_group("day_night_cycle")
 		if dnc:
-			if "event_system" in dnc and dnc.event_system and dnc.event_system.has_method("set_game_mode"):
+			if dnc.has_method("reset_for_new_run"):
+				dnc.reset_for_new_run(mode)
+			elif "event_system" in dnc and dnc.event_system and dnc.event_system.has_method("set_game_mode"):
 				dnc.event_system.set_game_mode(mode)
 			elif dnc.has_method("set_game_mode"):
 				dnc.set_game_mode(mode)

@@ -581,18 +581,23 @@ func _on_buy_machine_pressed(machine: Dictionary) -> void:
 
 	if mid != "critter_compass" and _player.has_method("select_machine_by_id"):
 		_player.select_machine_by_id(mid)
+	if _player.has_method("_update_hud"):
+		_player._update_hud()
 
 	if _player.has_method("_show_feedback"):
 		if mid == "critter_compass":
 			_player._show_feedback("🧭 %s Equipped! Event targets will now be tracked!" % machine.get("name", "Compass"))
 		else:
-			_player._show_feedback("⚙️ %s Purchased! Press [1-3] to select, [C] to build!" % machine.get("name", "Machine"))
+			_player._show_feedback("⚙️ %s Purchased! Press [1-5] to select, [C] to build!" % machine.get("name", "Machine"))
 
 	machine_purchased.emit(mid)
 	_refresh_header()
 	_rebuild_cards()
 	if is_instance_valid(_dlg_label):
-		_dlg_label.text = "Mossy: \"%s siap dipakai! Tekan [1-3] lalu [C] di dunia!\"" % str(machine.get("name", "Alat"))
+		if mid == "critter_compass":
+			_dlg_label.text = "Mossy: \"Tracker Compass aktif! Arah mob event langsung muncul di HUD atas!\""
+		else:
+			_dlg_label.text = "Mossy: \"%s siap dipakai! Tekan [1-5] lalu [C] di dunia!\"" % str(machine.get("name", "Alat"))
 
 
 func _deploy_machine(machine: Dictionary) -> void:
