@@ -342,6 +342,14 @@ func _update_night_lighting() -> void:
 func end_day_early() -> void:
 	if is_night or is_waiting_for_day_start:
 		return
+	if event_system != null and event_system.is_event_active and not event_system.is_event_completed:
+		var player := get_tree().get_first_node_in_group("player")
+		if is_instance_valid(player) and player.has_method("_show_feedback"):
+			if event_system.active_event_id == "expedition":
+				player._show_feedback("🚩 Plant the Ranger Flag at the Summit Peak first!")
+			else:
+				player._show_feedback("⚠️ Complete the active event first!")
+		return
 	print("DayNightCycle: Player ended day %d early!" % current_day)
 	day_elapsed_seconds = day_duration_seconds
 	trigger_night()
@@ -381,6 +389,8 @@ func _do_trigger_night() -> void:
 	var target_quota: float = get_current_quota()
 	var current_collected: float = sc_today if quota_type == QuotaType.SLOP_CREDIT else float(items_today)
 	var quota_passed: bool = (not quota_enabled) or (current_collected >= target_quota)
+	if event_system != null and event_system.is_event_active and not event_system.is_event_completed:
+		quota_passed = false
 
 	emit_signal("night_started", current_day, quota_passed)
 

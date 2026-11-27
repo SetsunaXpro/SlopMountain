@@ -84,6 +84,10 @@ _surfaces = [{
 blend_shape_mode = 0
 shadow_mesh = SubResource("ArrayMesh_8gqmn")
 
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_trunk"]
+height = 6.0
+radius = 0.8
+
 [node name="pohon 2" type="MeshInstance3D" unique_id=1480297522]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.9105673, 0, 0)
 material_override = SubResource("StandardMaterial3D_xrha8")
@@ -92,3 +96,9 @@ mesh = SubResource("ArrayMesh_26jrq")
 [node name="Icosphere" type="MeshInstance3D" parent="." unique_id=124233178]
 material_override = SubResource("StandardMaterial3D_rgo0p")
 mesh = SubResource("ArrayMesh_q5ls6")
+
+[node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=1480297523]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=1480297524]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.98, 3.0, -0.46)
+shape = SubResource("CylinderShape3D_trunk")

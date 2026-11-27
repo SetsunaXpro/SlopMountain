@@ -1,0 +1,13 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://summit_peak.gd" id="1_summit"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_summit"]
+radius = 4.5
+
+[node name="SummitPeak" type="Area3D" groups=["summit_peak"]]
+script = ExtResource("1_summit")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+shape = SubResource("SphereShape3D_summit")

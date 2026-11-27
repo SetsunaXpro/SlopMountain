@@ -152,6 +152,11 @@ const HOTBAR_GRID_SLOTS: int = 6
 var selected_hotbar_slot: int = 0
 var has_compass: bool = false
 var _compass_label: Label = null
+var _wallhack_timer: float = 0.0
+var _wallhack_pulse_active: bool = false
+var _wallhack_overridden: Array = []
+var has_summit_flag: bool = false
+var _held_flag_node: Node3D = null
 
 var placed_machines: Dictionary = {}
 var selected_machine_index: int = 0
@@ -322,6 +327,9 @@ func _refresh_multiplayer_authority() -> void:
 
 
 func _ready() -> void:
+	floor_max_angle = deg_to_rad(68.0)
+	floor_snap_length = 0.35
+	floor_stop_on_slope = true
 	_net_pos = global_position
 	_net_rot_y = rotation.y
 	_net_head_x = head.rotation.x
@@ -427,7 +435,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_N:
 			var dnc = get_tree().get_first_node_in_group("day_night_cycle")
 			if dnc and not dnc.is_night and not dnc.is_waiting_for_day_start:
-				_show_feedback("🌅 Hold [N] to End Day Early")
+				var es = dnc.get("event_system")
+				if es != null and es.is_event_active and not es.is_event_completed:
+					if es.active_event_id == "expedition":
+						_show_feedback("🚩 Plant the Ranger Flag at the Summit Peak first!")
+					else:
+						_show_feedback("⚠️ Complete the active event first!")
+				else:
+					_show_feedback("🌅 Hold [N] to End Day Early")
 
 	if InputMap.has_action(input_equip_trash) and event.is_action_pressed(input_equip_trash):
 		toggle_equip_trash_grenade()
@@ -465,6 +480,7 @@ func _process(delta: float) -> void:
 	if is_building:
 		_update_build_preview(delta)
 	_update_compass_hud()
+	_update_compass_wallhack(delta)
 
 
 func _physics_process(delta: float) -> void:
@@ -740,6 +756,13 @@ func _process_action_cooldown(delta: float) -> void:
 func _process_end_day_hold(delta: float) -> void:
 	var dnc := get_tree().get_first_node_in_group("day_night_cycle")
 	if not dnc or dnc.is_night or dnc.get("is_waiting_for_day_start"):
+		if _end_day_hold_timer > 0.0:
+			_end_day_hold_timer = 0.0
+			_hide_action_bar()
+		return
+
+	var es = dnc.get("event_system")
+	if es != null and es.is_event_active and not es.is_event_completed:
 		if _end_day_hold_timer > 0.0:
 			_end_day_hold_timer = 0.0
 			_hide_action_bar()
@@ -1787,13 +1810,13 @@ func _setup_machine_hotbar(root: Control) -> void:
 		_build_slot_panels.append(panel)
 		_build_slot_labels.append(lbl)
 
-	# Compass HUD Indicator (shown when Tracker Compass is owned)
+	# Compass HUD Indicator (positioned cleanly below Event HUD Panel)
 	_compass_label = Label.new()
 	_compass_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_compass_label.offset_left = -190
 	_compass_label.offset_right = 190
-	_compass_label.offset_top = 118
-	_compass_label.offset_bottom = 144
+	_compass_label.offset_top = 186
+	_compass_label.offset_bottom = 212
 	_compass_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_compass_label.add_theme_font_override("font", UIAssets.get_font("bold"))
 	_compass_label.add_theme_font_size_override("font_size", 13)
@@ -1821,8 +1844,64 @@ func _setup_machine_hotbar(root: Control) -> void:
 	_build_hotbar_container.add_child(_build_indicator_panel)
 
 
+func give_summit_flag() -> void:
+	has_summit_flag = true
+	if not is_instance_valid(_held_flag_node):
+		_held_flag_node = Node3D.new()
+		_held_flag_node.name = "HeldSummitFlag"
+		_held_flag_node.position = Vector3(0.36, -0.28, -0.58)
+		_held_flag_node.rotation_degrees = Vector3(10.0, -14.0, -8.0)
+
+		var pole := MeshInstance3D.new()
+		var pole_cyl := CylinderMesh.new()
+		pole_cyl.top_radius = 0.015
+		pole_cyl.bottom_radius = 0.018
+		pole_cyl.height = 0.72
+		pole.mesh = pole_cyl
+		var pole_mat := StandardMaterial3D.new()
+		pole_mat.albedo_color = Color(0.85, 0.75, 0.30)
+		pole_mat.metallic = 0.7
+		pole.material_override = pole_mat
+		_held_flag_node.add_child(pole)
+
+		var cloth := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3(0.28, 0.16, 0.015)
+		cloth.mesh = box
+		cloth.position = Vector3(0.14, 0.25, 0.0)
+		var cloth_mat := StandardMaterial3D.new()
+		cloth_mat.albedo_color = Color(0.15, 0.55, 0.95)
+		cloth_mat.roughness = 0.4
+		cloth.material_override = cloth_mat
+		_held_flag_node.add_child(cloth)
+
+		head.add_child(_held_flag_node)
+
+	_held_flag_node.visible = true
+	selected_hotbar_slot = 0
+	if is_building:
+		cancel_build_mode()
+	_update_machine_hotbar()
+	_show_feedback("🚩 Ranger Flag added to inventory! Climb to the Summit Peak and plant it!")
+
+
+func consume_summit_flag() -> void:
+	has_summit_flag = false
+	if is_instance_valid(_held_flag_node):
+		_held_flag_node.queue_free()
+		_held_flag_node = null
+	_update_machine_hotbar()
+
+
 func _get_hotbar_items() -> Array[Dictionary]:
 	var items: Array[Dictionary] = []
+	if has_summit_flag:
+		items.append({
+			"id": "summit_flag",
+			"name": "RANGER FLAG",
+			"short_name": "FLAG",
+			"icon": "🚩"
+		})
 	for mid in owned_machines:
 		if mid == "critter_compass":
 			continue
@@ -1839,44 +1918,68 @@ func _select_hotbar_slot(slot_idx: int) -> void:
 	selected_hotbar_slot = slot_idx
 	var items := _get_hotbar_items()
 	if slot_idx < items.size():
-		select_machine_by_id(items[slot_idx].id)
+		if items[slot_idx].id == "summit_flag":
+			if is_building:
+				cancel_build_mode()
+			if is_instance_valid(_held_flag_node):
+				_held_flag_node.visible = true
+			_update_machine_hotbar()
+			_show_feedback("🚩 Ranger Flag in hand! Climb to the Summit Peak and press [E] to plant!")
+		else:
+			if is_instance_valid(_held_flag_node):
+				_held_flag_node.visible = false
+			select_machine_by_id(items[slot_idx].id)
 	else:
 		if is_building:
 			cancel_build_mode()
+		if is_instance_valid(_held_flag_node):
+			_held_flag_node.visible = false
 		_update_machine_hotbar()
 
 
 func _update_compass_hud() -> void:
 	if not is_instance_valid(_compass_label):
 		return
+
+	# Always guide toward an active, unplanted Expedition Summit Peak
+	var target_peak: Node3D = null
+	for p in get_tree().get_nodes_in_group("summit_peak"):
+		if p is Node3D and is_instance_valid(p) and bool(p.get("is_expedition_active")) and not bool(p.get("is_flag_planted")):
+			target_peak = p
+			break
+
 	var compass_owned := has_compass or ("critter_compass" in owned_machines)
-	if not compass_owned:
+	if target_peak == null and not compass_owned:
 		_compass_label.visible = false
 		return
 
-	var nearest: Node3D = null
+	var target_node: Node3D = target_peak
+	var is_peak_target := (target_peak != null)
 	var best_dist := INF
-	for mob in get_tree().get_nodes_in_group("event_mobs"):
-		if mob is Node3D and is_instance_valid(mob):
-			var d := global_position.distance_to(mob.global_position)
-			if d < best_dist:
-				best_dist = d
-				nearest = mob
+	if target_node != null:
+		best_dist = global_position.distance_to(target_node.global_position)
+	else:
+		for mob in get_tree().get_nodes_in_group("event_mobs"):
+			if mob is Node3D and is_instance_valid(mob):
+				var d := global_position.distance_to(mob.global_position)
+				if d < best_dist:
+					best_dist = d
+					target_node = mob
 
 	_compass_label.visible = true
-	if nearest == null:
+	if target_node == null:
 		_compass_label.text = "🧭 COMPASS: No active event mob"
 		_compass_label.add_theme_color_override("font_color", Color(0.65, 0.72, 0.78))
 		return
 
-	var to_mob := nearest.global_position - global_position
-	to_mob.y = 0.0
+	var to_target := target_node.global_position - global_position
+	to_target.y = 0.0
 	var fwd := -head.global_basis.z
 	fwd.y = 0.0
 	var right := head.global_basis.x
 	right.y = 0.0
-	var dot_f := fwd.normalized().dot(to_mob.normalized())
-	var dot_r := right.normalized().dot(to_mob.normalized())
+	var dot_f := fwd.normalized().dot(to_target.normalized()) if to_target.length_squared() > 0.001 else 1.0
+	var dot_r := right.normalized().dot(to_target.normalized()) if to_target.length_squared() > 0.001 else 0.0
 	var arrow := "⬆️"
 	if dot_f > 0.65:
 		arrow = "⬆️ AHEAD"
@@ -1886,8 +1989,89 @@ func _update_compass_hud() -> void:
 		arrow = "↗️ RIGHT" if dot_f > 0.0 else "↘️ BACK-R"
 	elif dot_r < -0.35:
 		arrow = "↖️ LEFT" if dot_f > 0.0 else "↙️ BACK-L"
-	_compass_label.text = "🧭 MOB: %dm  [%s]" % [int(round(best_dist)), arrow]
-	_compass_label.add_theme_color_override("font_color", Color(0.45, 0.95, 1.0))
+
+	if is_peak_target:
+		_compass_label.text = "⛰️ PEAK: %dm  [%s]" % [int(round(best_dist)), arrow]
+		_compass_label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.32))
+	else:
+		_compass_label.text = "🧭 SCANNER: %dm  [%s]" % [int(round(best_dist)), arrow]
+		_compass_label.add_theme_color_override("font_color", Color(0.45, 0.95, 1.0))
+
+
+func _update_compass_wallhack(delta: float) -> void:
+	var compass_owned := has_compass or ("critter_compass" in owned_machines)
+	if not compass_owned:
+		if _wallhack_pulse_active:
+			_clear_wallhack_overrides()
+		return
+
+	const CYCLE_SEC := 3.0
+	const PULSE_SEC := 1.15
+	_wallhack_timer += delta
+	if _wallhack_timer >= CYCLE_SEC:
+		_wallhack_timer = fmod(_wallhack_timer, CYCLE_SEC)
+
+	if _wallhack_timer <= PULSE_SEC:
+		_wallhack_pulse_active = true
+		var phase := clampf(_wallhack_timer / PULSE_SEC, 0.0, 1.0)
+		var alpha := sin(phase * PI) * 0.82
+		_apply_wallhack_overrides(alpha)
+	elif _wallhack_pulse_active:
+		_clear_wallhack_overrides()
+
+
+func _apply_wallhack_overrides(alpha: float) -> void:
+	var hostile_mat := StandardMaterial3D.new()
+	hostile_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	hostile_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	hostile_mat.no_depth_test = true
+	hostile_mat.render_priority = 12
+	hostile_mat.albedo_color = Color(1.0, 0.25, 0.15, alpha)
+
+	var peaceful_mat := StandardMaterial3D.new()
+	peaceful_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	peaceful_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	peaceful_mat.no_depth_test = true
+	peaceful_mat.render_priority = 12
+	peaceful_mat.albedo_color = Color(0.20, 1.0, 0.85, alpha)
+
+	var seen := {}
+	for grp in ["event_mobs", "critters", "bosses"]:
+		for mob in get_tree().get_nodes_in_group(grp):
+			if not is_instance_valid(mob) or seen.has(mob):
+				continue
+			seen[mob] = true
+			if mob.get("is_dead") == true:
+				continue
+			var is_hostile := mob.is_in_group("bosses") or mob.is_in_group("evil_critters")
+			var mat := hostile_mat if is_hostile else peaceful_mat
+			_override_mob_shapes_recursive(mob, mat)
+
+
+func _override_mob_shapes_recursive(node: Node, mat: StandardMaterial3D) -> void:
+	if node is MeshInstance3D or node is CSGPrimitive3D:
+		var geo := node as GeometryInstance3D
+		if not geo.has_meta("_wh_saved"):
+			geo.set_meta("_wh_saved", true)
+			geo.set_meta("_wh_orig_mat", geo.material_override)
+			_wallhack_overridden.append(geo)
+		geo.material_override = mat
+	for child in node.get_children():
+		_override_mob_shapes_recursive(child, mat)
+
+
+func _clear_wallhack_overrides() -> void:
+	_wallhack_pulse_active = false
+	for geo in _wallhack_overridden:
+		if is_instance_valid(geo):
+			if geo.has_meta("_wh_orig_mat"):
+				geo.material_override = geo.get_meta("_wh_orig_mat")
+				geo.remove_meta("_wh_orig_mat")
+			else:
+				geo.material_override = null
+			if geo.has_meta("_wh_saved"):
+				geo.remove_meta("_wh_saved")
+	_wallhack_overridden.clear()
 
 
 func _update_machine_hotbar() -> void:

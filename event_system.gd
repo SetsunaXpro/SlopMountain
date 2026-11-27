@@ -257,15 +257,41 @@ func _do_start_event(event_id: String) -> void:
 # ---------------------------------------------------------------------------
 
 func _spawn_expedition_landmark(world: Node) -> void:
-	var peak = SummitPeakScript.new()
-	peak.name = "SummitPeakLandmark"
-	peak.position = Vector3(0, 0, -28.0)
-	world.add_child(peak)
-	active_spawned_nodes.append(peak)
+	var peak: Node = null
+	var existing_peaks := get_tree().get_nodes_in_group("summit_peak")
+	if not existing_peaks.is_empty():
+		peak = existing_peaks[0]
+	else:
+		peak = SummitPeakScript.new()
+		peak.name = "SummitPeakLandmark"
+		var spawn_pos := Vector3(0.0, 0.0, -28.0)
+		if world is Node3D:
+			var space := (world as Node3D).get_world_3d().direct_space_state
+			if space:
+				var q := PhysicsRayQueryParameters3D.create(Vector3(spawn_pos.x, 250.0, spawn_pos.z), Vector3(spawn_pos.x, -100.0, spawn_pos.z))
+				q.collision_mask = 1
+				var hit := space.intersect_ray(q)
+				if not hit.is_empty():
+					spawn_pos.y = hit.position.y
+		peak.position = spawn_pos
+		world.add_child(peak)
+		active_spawned_nodes.append(peak)
 
-	peak.flag_planted.connect(func():
-		complete_event("expedition")
-	)
+	if peak.has_method("activate_expedition"):
+		peak.activate_expedition()
+
+	if peak.has_signal("flag_planted"):
+		var cb := Callable(self, "_on_expedition_flag_planted")
+		if not peak.is_connected("flag_planted", cb):
+			peak.connect("flag_planted", cb)
+
+	var player := get_tree().get_first_node_in_group("player")
+	if is_instance_valid(player) and player.has_method("give_summit_flag"):
+		player.give_summit_flag()
+
+
+func _on_expedition_flag_planted() -> void:
+	complete_event("expedition")
 
 
 var _make_peace_tamed_count: int = 0
@@ -438,5 +464,11 @@ func cleanup_event_entities() -> void:
 		if is_instance_valid(node):
 			node.queue_free()
 	active_spawned_nodes.clear()
+	for p in get_tree().get_nodes_in_group("summit_peak"):
+		if is_instance_valid(p) and not p.is_queued_for_deletion() and p.has_method("deactivate_expedition"):
+			p.deactivate_expedition()
 	is_event_active = false
 	active_event_id = ""
+	var player := get_tree().get_first_node_in_group("player")
+	if is_instance_valid(player) and player.has_method("consume_summit_flag"):
+		player.consume_summit_flag()

@@ -80,20 +80,32 @@ func _process(_delta: float) -> void:
 			unit = "KG" if dnc.quota_type == DayNightCycle.QuotaType.ITEM_COUNT else "SC"
 		update_quota(cur, tgt, unit)
 
+	var event_locked := false
+	if dnc and "event_system" in dnc and dnc.event_system:
+		var es_check = dnc.event_system
+		if es_check.is_event_active and not es_check.is_event_completed:
+			event_locked = true
+
 	if "day_duration_seconds" in dnc and "day_elapsed_seconds" in dnc:
 		if not dnc.is_night:
 			var remaining_seconds: float = maxf(0.0, float(dnc.day_duration_seconds) - float(dnc.day_elapsed_seconds))
 			var rem_min: int = int(remaining_seconds / 60.0)
 			var rem_sec: int = int(remaining_seconds) % 60
 			var time_str := "%02d:%02d" % [rem_min, rem_sec]
-			update_time_display(time_str, false, quota_passed)
+			update_time_display(time_str, false, quota_passed and not event_locked)
 		else:
-			update_time_display("00:00", true, quota_passed)
+			update_time_display("00:00", true, quota_passed and not event_locked)
 
 	if is_instance_valid(end_day_btn):
 		var is_waiting: bool = bool(dnc.get("is_waiting_for_day_start")) if "is_waiting_for_day_start" in dnc else false
 		end_day_btn.visible = (not dnc.is_night) and (not is_waiting)
-		if quota_passed:
+		end_day_btn.disabled = event_locked
+		if event_locked:
+			end_day_btn.text = "🔒 Finish Event First"
+			end_day_btn.add_theme_color_override("font_color", Color(0.95, 0.45, 0.35))
+			if _end_day_sb_normal:
+				_end_day_sb_normal.bg_color = Color(0.18, 0.09, 0.09, 0.88)
+		elif quota_passed:
 			end_day_btn.text = "✓  Hold [N] End Day"
 			end_day_btn.add_theme_color_override("font_color", COL_GREEN)
 			if _end_day_sb_normal:

@@ -447,6 +447,7 @@ class SettingsOverlay extends CanvasLayer:
 
 	var _toggle_fs_btn: Button = null
 	var _toggle_shake_btn: Button = null
+	var _res_btns: Dictionary = {}
 	var _slider_refs: Dictionary = {}
 
 	func _ready() -> void:
@@ -512,37 +513,64 @@ class SettingsOverlay extends CanvasLayer:
 
 		# --- BOTTOM SECTION: TAMPILAN & AKSESIBILITAS ---
 		var sec_disp := UIAssets.create_label("TAMPILAN & AKSESIBILITAS", 14, Color(0.20, 0.14, 0.08), "black")
-		sec_disp.position = Vector2(36, 232)
+		sec_disp.position = Vector2(36, 224)
 		sec_disp.size = Vector2(340, 20)
 		paper.add_child(sec_disp)
 
 		var fs_lbl := UIAssets.create_label("FULLSCREEN MODE", 13, UIAssets.COL_INK, "black")
-		fs_lbl.position = Vector2(36, 264)
+		fs_lbl.position = Vector2(36, 252)
 		fs_lbl.size = Vector2(260, 20)
 		paper.add_child(fs_lbl)
 
-		var fs_sub := UIAssets.create_label("Tampilkan layar penuh (1280×720 skala otomatis)", 11, UIAssets.COL_INK_MUTED, "semibold")
-		fs_sub.position = Vector2(36, 283)
-		fs_sub.size = Vector2(440, 18)
+		var fs_sub := UIAssets.create_label("Tampilkan layar penuh (skala otomatis)", 11, UIAssets.COL_INK_MUTED, "semibold")
+		fs_sub.position = Vector2(36, 270)
+		fs_sub.size = Vector2(400, 18)
 		paper.add_child(fs_sub)
 
 		_toggle_fs_btn = _create_toggle_button(bool(UIAssets.settings["fullscreen"]))
-		_toggle_fs_btn.position = Vector2(556, 266)
+		_toggle_fs_btn.position = Vector2(556, 253)
 		_toggle_fs_btn.pressed.connect(_on_toggle_fullscreen)
 		paper.add_child(_toggle_fs_btn)
 
+		var res_lbl := UIAssets.create_label("RESOLUTION", 13, UIAssets.COL_INK, "black")
+		res_lbl.position = Vector2(36, 294)
+		res_lbl.size = Vector2(260, 20)
+		paper.add_child(res_lbl)
+
+		var res_sub := UIAssets.create_label("Ukuran jendela saat mode windowed", 11, UIAssets.COL_INK_MUTED, "semibold")
+		res_sub.position = Vector2(36, 312)
+		res_sub.size = Vector2(400, 18)
+		paper.add_child(res_sub)
+
+		var cur_res: String = str(UIAssets.settings.get("resolution", "1280x720"))
+		var rx: float = 468.0
+		for preset in UIAssets.RESOLUTION_PRESETS:
+			var rkey: String = str(preset["key"])
+			var rbtn := Button.new()
+			rbtn.text = str(preset["short"])
+			rbtn.position = Vector2(rx, 296)
+			rbtn.size = Vector2(60, 28)
+			rbtn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+			rbtn.add_theme_font_override("font", UIAssets.get_font("black"))
+			rbtn.add_theme_font_size_override("font_size", 12)
+			rbtn.pressed.connect(_on_select_resolution.bind(rkey))
+			paper.add_child(rbtn)
+			_res_btns[rkey] = rbtn
+			rx += 66.0
+		_refresh_resolution_buttons(cur_res)
+
 		var sh_lbl := UIAssets.create_label("SCREEN SHAKE", 13, UIAssets.COL_INK, "black")
-		sh_lbl.position = Vector2(36, 314)
+		sh_lbl.position = Vector2(36, 336)
 		sh_lbl.size = Vector2(260, 20)
 		paper.add_child(sh_lbl)
 
 		var sh_sub := UIAssets.create_label("Efek getar kamera saat longsor & buang sampah besar", 11, UIAssets.COL_INK_MUTED, "semibold")
-		sh_sub.position = Vector2(36, 333)
+		sh_sub.position = Vector2(36, 354)
 		sh_sub.size = Vector2(440, 18)
 		paper.add_child(sh_sub)
 
 		_toggle_shake_btn = _create_toggle_button(bool(UIAssets.settings["screen_shake"]))
-		_toggle_shake_btn.position = Vector2(556, 316)
+		_toggle_shake_btn.position = Vector2(556, 337)
 		_toggle_shake_btn.pressed.connect(_on_toggle_shake)
 		paper.add_child(_toggle_shake_btn)
 
@@ -644,6 +672,28 @@ class SettingsOverlay extends CanvasLayer:
 					sb.modulate_color = Color(1.1, 1.1, 1.1)
 				btn.add_theme_stylebox_override(state, sb)
 
+	func _refresh_resolution_buttons(active_key: String) -> void:
+		for rkey in _res_btns.keys():
+			var btn: Button = _res_btns[rkey]
+			var is_sel: bool = (rkey == active_key)
+			btn.add_theme_color_override("font_color", UIAssets.COL_INK if is_sel else UIAssets.COL_CREAM)
+			for state in ["normal", "hover", "pressed"]:
+				var sb := StyleBoxFlat.new()
+				sb.set_corner_radius_all(5)
+				sb.set_border_width_all(2)
+				if is_sel:
+					sb.bg_color = UIAssets.COL_AMBER if state != "hover" else UIAssets.COL_GOLD
+					sb.border_color = Color(0.28, 0.18, 0.08)
+				else:
+					sb.bg_color = Color(0.24, 0.20, 0.16) if state != "hover" else Color(0.32, 0.27, 0.22)
+					sb.border_color = Color(0.14, 0.11, 0.09)
+				btn.add_theme_stylebox_override(state, sb)
+
+	func _on_select_resolution(res_key: String) -> void:
+		UIAssets.settings["resolution"] = res_key
+		_refresh_resolution_buttons(res_key)
+		UIAssets.apply_settings()
+
 	func _on_toggle_fullscreen() -> void:
 		UIAssets.settings["fullscreen"] = not bool(UIAssets.settings["fullscreen"])
 		UIAssets.apply_settings()
@@ -658,6 +708,7 @@ class SettingsOverlay extends CanvasLayer:
 		UIAssets.settings["music_vol"] = 0.70
 		UIAssets.settings["sfx_vol"] = 0.90
 		UIAssets.settings["fullscreen"] = false
+		UIAssets.settings["resolution"] = "1280x720"
 		UIAssets.settings["screen_shake"] = true
 		for k in ["master_vol", "music_vol", "sfx_vol"]:
 			if _slider_refs.has(k):
@@ -666,6 +717,7 @@ class SettingsOverlay extends CanvasLayer:
 				_slider_refs[k]["fill"].value = v
 				_slider_refs[k]["pct"].text = "%d%%" % int(round(v * 100.0))
 		_refresh_toggle_visual(_toggle_fs_btn, false)
+		_refresh_resolution_buttons("1280x720")
 		_refresh_toggle_visual(_toggle_shake_btn, true)
 		UIAssets.apply_settings()
 		UIAssets.save_settings()

@@ -22,12 +22,19 @@ const COL_BLUE_INK    := Color(0.16, 0.42, 0.66, 1.0)
 
 const SETTINGS_PATH := "user://slopmountain_settings.cfg"
 
+const RESOLUTION_PRESETS := [
+	{"key": "1280x720",  "short": "720p",  "label": "1280×720",  "size": Vector2i(1280, 720)},
+	{"key": "1366x768",  "short": "768p",  "label": "1366×768",  "size": Vector2i(1366, 768)},
+	{"key": "1920x1080", "short": "1080p", "label": "1920×1080", "size": Vector2i(1920, 1080)},
+]
+
 static var _settings_loaded: bool = false
 static var settings: Dictionary = {
 	"master_vol": 0.85,
 	"music_vol": 0.75,
 	"sfx_vol": 0.90,
 	"fullscreen": false,
+	"resolution": "1280x720",
 	"screen_shake": true,
 }
 
@@ -308,6 +315,20 @@ static func ensure_audio_buses() -> void:
 			AudioServer.set_bus_send(idx, "Master")
 
 
+static func _get_resolution_size(res_key: String) -> Vector2i:
+	for preset in RESOLUTION_PRESETS:
+		if preset["key"] == res_key:
+			return preset["size"]
+	return Vector2i(1280, 720)
+
+
+static func _is_valid_resolution(res_key: String) -> bool:
+	for preset in RESOLUTION_PRESETS:
+		if preset["key"] == res_key:
+			return true
+	return false
+
+
 static func load_and_apply_settings() -> void:
 	ensure_audio_buses()
 	if not _settings_loaded:
@@ -317,6 +338,8 @@ static func load_and_apply_settings() -> void:
 			settings["music_vol"] = clampf(float(cfg.get_value("audio", "music_vol", 0.75)), 0.0, 1.0)
 			settings["sfx_vol"] = clampf(float(cfg.get_value("audio", "sfx_vol", 0.90)), 0.0, 1.0)
 			settings["fullscreen"] = bool(cfg.get_value("display", "fullscreen", false))
+			var saved_res := str(cfg.get_value("display", "resolution", "1280x720"))
+			settings["resolution"] = saved_res if _is_valid_resolution(saved_res) else "1280x720"
 			settings["screen_shake"] = bool(cfg.get_value("gameplay", "screen_shake", true))
 		_settings_loaded = true
 	apply_settings()
@@ -328,6 +351,7 @@ static func save_settings() -> void:
 	cfg.set_value("audio", "music_vol", settings["music_vol"])
 	cfg.set_value("audio", "sfx_vol", settings["sfx_vol"])
 	cfg.set_value("display", "fullscreen", settings["fullscreen"])
+	cfg.set_value("display", "resolution", settings.get("resolution", "1280x720"))
 	cfg.set_value("gameplay", "screen_shake", settings["screen_shake"])
 	cfg.save(SETTINGS_PATH)
 
@@ -339,12 +363,29 @@ static func apply_settings() -> void:
 	_apply_bus_volume("SFX", float(settings.get("sfx_vol", 0.90)))
 
 	if DisplayServer.get_name() != "headless":
+		var ml := Engine.get_main_loop()
+		var win: Window = (ml as SceneTree).root if ml is SceneTree else null
 		var want_fs: bool = bool(settings.get("fullscreen", false))
 		var cur_mode := DisplayServer.window_get_mode()
-		if want_fs and cur_mode != DisplayServer.WINDOW_MODE_FULLSCREEN:
-			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-		elif not want_fs and cur_mode == DisplayServer.WINDOW_MODE_FULLSCREEN:
-			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		if want_fs:
+			if cur_mode != DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN and cur_mode != DisplayServer.WINDOW_MODE_FULLSCREEN:
+				if win != null:
+					win.mode = Window.MODE_EXCLUSIVE_FULLSCREEN
+				DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN)
+		else:
+			if cur_mode == DisplayServer.WINDOW_MODE_FULLSCREEN or cur_mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN:
+				if win != null:
+					win.mode = Window.MODE_WINDOWED
+				DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+			var target_size := _get_resolution_size(str(settings.get("resolution", "1280x720")))
+			if DisplayServer.window_get_size() != target_size:
+				DisplayServer.window_set_size(target_size)
+				var screen_idx := DisplayServer.window_get_current_screen()
+				var usable := DisplayServer.screen_get_usable_rect(screen_idx)
+				var pos := usable.position + (usable.size - target_size) / 2
+				pos.x = maxi(pos.x, usable.position.x)
+				pos.y = maxi(pos.y, usable.position.y)
+				DisplayServer.window_set_position(pos)
 
 
 static func _apply_bus_volume(bus_name: String, linear_val: float) -> void:
@@ -376,12 +417,17 @@ static func get_music_manager() -> Node:
 	if tree.root == null:
 		return null
 	var mgr := tree.root.get_node_or_null("SlopMusicManager")
-	if mgr == null:
-		load_and_apply_settings()
-		mgr = MusicController.new()
-		mgr.name = "SlopMusicManager"
-		tree.root.call_deferred("add_child", mgr)
+	if mgr != null and is_instance_valid(mgr) and not mgr.is_queued_for_deletion():
 		return mgr
+	if tree.root.has_meta("_slop_music_mgr"):
+		var pending = tree.root.get_meta("_slop_music_mgr")
+		if pending is Node and is_instance_valid(pending) and not pending.is_queued_for_deletion():
+			return pending
+	load_and_apply_settings()
+	mgr = MusicController.new()
+	mgr.name = "SlopMusicManager"
+	tree.root.set_meta("_slop_music_mgr", mgr)
+	tree.root.call_deferred("add_child", mgr)
 	return mgr
 
 
@@ -409,6 +455,12 @@ class MusicController extends Node:
 	var _poll_accum: float = 0.0
 
 	func _ready() -> void:
+		var root := get_tree().root if get_tree() != null else null
+		if root != null:
+			var existing := root.get_node_or_null("SlopMusicManager")
+			if existing != null and existing != self and is_instance_valid(existing) and not existing.is_queued_for_deletion():
+				queue_free()
+				return
 		process_mode = Node.PROCESS_MODE_ALWAYS
 		UIAssets.load_and_apply_settings()
 		_p_a = _make_player("BGMChannelA")
@@ -521,6 +573,8 @@ class MusicController extends Node:
 		return stream
 
 	func play_track(track_key: String, fade_sec: float = 0.55) -> void:
+		if not is_inside_tree():
+			return
 		if track_key == _current_track and _active_player != null and _active_player.playing:
 			return
 		var stream := _load_stream(track_key)
@@ -536,12 +590,22 @@ class MusicController extends Node:
 		_active_player = incoming
 		_current_track = track_key
 
+		if _duck_tween != null and _duck_tween.is_valid():
+			_duck_tween.kill()
+		if _fade_tween != null and _fade_tween.is_valid():
+			_fade_tween.kill()
+
 		incoming.stream = stream
+		if fade_sec <= 0.0:
+			incoming.volume_db = target_db
+			incoming.play()
+			if outgoing != null and outgoing != incoming and outgoing.playing:
+				outgoing.stop()
+			return
+
 		incoming.volume_db = -42.0
 		incoming.play()
 
-		if _fade_tween != null and _fade_tween.is_valid():
-			_fade_tween.kill()
 		_fade_tween = create_tween()
 		_fade_tween.set_parallel(true)
 		_fade_tween.tween_property(incoming, "volume_db", target_db, fade_sec)

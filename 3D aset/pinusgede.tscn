@@ -99,6 +99,8 @@ mesh = SubResource("ArrayMesh_b1qe5")
 material_override = SubResource("StandardMaterial3D_nw85d")
 mesh = SubResource("ArrayMesh_wngn4")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=2042719925]
+[node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=2042719924]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=2042719925]
 transform = Transform3D(0.9999986, 0, 0, 0, 0.9999669, 0, 0, 0, 0.9999748, -1.1083783, 4.9544334, 6.1227474)
 shape = SubResource("BoxShape3D_p6leq")

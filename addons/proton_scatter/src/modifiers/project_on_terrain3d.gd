@@ -17,6 +17,9 @@ signal projection_completed
 @export var terrain_node : NodePath
 @export var align_with_collision_normal : bool = false
 @export_range(0.0, 90.0, 0.1) var max_slope : float = 90.0
+@export var enable_height_filtering : bool = false
+@export var min_height : float = 0.0
+@export var max_height : float = 1000.0
 @export var enable_texture_filtering : bool = false
 @export_range(0, 31) var target_texture_id : int = 0
 @export var not_target_texture : bool = false
@@ -96,6 +99,8 @@ func _process_transforms(transforms, domain, _seed) -> void:
 		var location: Vector3 = (gt * t).origin
 		var height: float = _terrain.data.get_surface_height(location)
 		if is_nan(height):
+			continue
+		if enable_height_filtering and (height < min_height or height > max_height):
 			continue
 		
 		var normal: Vector3 = _terrain.data.get_normal(location)
