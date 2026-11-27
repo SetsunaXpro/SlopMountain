@@ -68,6 +68,7 @@ func _ready() -> void:
 	if hud:
 		hud.visible = false
 	UIAssets.sync_bgm()
+	UIAssets.play_sfx("open", 0.03)
 
 	if NetworkManager != null and NetworkManager.is_multiplayer_active():
 		if not NetworkManager.quota_votes_updated.is_connected(_refresh_vote_ui):
@@ -87,9 +88,17 @@ func _exit_tree() -> void:
 			NetworkManager.quota_votes_updated.disconnect(_refresh_vote_ui)
 		if NetworkManager.quota_vote_finalized.is_connected(_on_coop_vote_finalized):
 			NetworkManager.quota_vote_finalized.disconnect(_on_coop_vote_finalized)
-	var hud = get_tree().get_first_node_in_group("game_hud")
-	if hud:
-		hud.visible = true
+	var tree := get_tree()
+	if tree:
+		var any_other := false
+		for grp in ["title_screen", "buy_menu", "machine_buy_menu", "quota_menu", "pause_menu", "ui_modal_popup"]:
+			for n in tree.get_nodes_in_group(grp):
+				if n != self and is_instance_valid(n) and not n.is_queued_for_deletion():
+					any_other = true
+					break
+		var hud = tree.get_first_node_in_group("game_hud")
+		if hud and not any_other:
+			hud.visible = true
 
 
 func _resolve_references() -> void:
@@ -436,10 +445,12 @@ func _build_standard_papers() -> void:
 		card.add_child(subtag_lbl)
 		_subtag_labels.append(subtag_lbl)
 
-		# 3. Big Quota Target & Shift Duration (Colored ink per tier matching Figma)
+		# 3. Big Quota Target & Shift Duration (Matches live DayNightCycle quota unit: SC or KG)
 		var quota_cols := [COL_DARK_TEXT, Color(0.055, 0.302, 0.478), Color(0.561, 0.106, 0.078)]
+		var use_sc := (_dnc == null) or (not ("quota_type" in _dnc)) or (_dnc.quota_type == DayNightCycle.QuotaType.SLOP_CREDIT)
+		var quota_txt := ("$%.0f SC" % float(data["quota_target"])) if use_sc else ("%.0f KG" % float(data["quota_target"]))
 		var quota_lbl := UIAssets.create_label(
-			"%.0f KG" % float(data["quota_target"]), 32, quota_cols[mini(i, 2)], "black"
+			quota_txt, 32, quota_cols[mini(i, 2)], "black"
 		)
 		quota_lbl.position = Vector2(28, 86)
 		quota_lbl.size = Vector2(204, 44)
@@ -502,6 +513,7 @@ func _build_standard_papers() -> void:
 			btn_path, btn_txt, 14, Color(0.20, 0.12, 0.05) if is_sel else UIAssets.COL_CREAM, "", "black", 5
 		)
 		pilih_btn.position = Vector2(12, 358)
+		pilih_btn.set_meta("suppress_default_click_sfx", true)
 		pilih_btn.pressed.connect(_on_contract_selected.bind(i))
 		card.add_child(pilih_btn)
 		_pilih_buttons.append(pilih_btn)
@@ -720,6 +732,7 @@ func _build_bottom_bar() -> void:
 		btn_tex, btn_title, 15, COL_WHITE if is_boss_day else Color(0.20, 0.12, 0.05), "", "black", 5
 	)
 	_start_shift_btn.position = Vector2(950, 638)
+	_start_shift_btn.set_meta("suppress_default_click_sfx", true)
 	_start_shift_btn.pressed.connect(_on_start_shift_confirmed)
 	_content.add_child(_start_shift_btn)
 
@@ -771,6 +784,7 @@ func _refresh_top_bar() -> void:
 func _on_contract_selected(idx: int) -> void:
 	if idx < 0 or idx >= _contracts_data.size():
 		return
+	UIAssets.play_sfx("stamp", 0.05)
 	_selected_index = idx
 	_update_contract_selection_visuals()
 	emit_signal("contract_selected", _contracts_data[_selected_index])
@@ -829,6 +843,7 @@ func _update_contract_selection_visuals() -> void:
 
 
 func _on_start_shift_confirmed() -> void:
+	UIAssets.play_sfx("confirm", 0.03)
 	if NetworkManager != null and NetworkManager.is_multiplayer_active():
 		if NetworkManager.is_host():
 			NetworkManager.resolve_and_start_quota_vote()
@@ -888,6 +903,9 @@ func _finalize_shift_start() -> void:
 	var tw := create_tween()
 	tw.tween_property(_root, "modulate:a", 0.0, 0.22)
 	tw.tween_callback(func():
-		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+		if _player != null and _player.has_method("capture_mouse"):
+			_player.capture_mouse()
+		else:
+			Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 		queue_free()
 	)

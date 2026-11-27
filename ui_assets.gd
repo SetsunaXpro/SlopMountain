@@ -6,6 +6,7 @@ class_name UIAssets
 
 static var _cache: Dictionary = {}
 static var _font_cache: Dictionary = {}
+static var _music_mgr: Node = null
 
 # Shared palette matching Figma SlopMountain Ranger / Scrapbook aesthetic
 const COL_CREAM       := Color(0.96, 0.94, 0.87, 1.0)
@@ -113,6 +114,14 @@ static func get_card_art(item_id: String) -> Texture2D:
 		if tex != null:
 			return tex
 	return null
+
+
+## Checks for a transparent sprite icon cutout for the compact HUD Equipped Rail
+static func get_perk_icon(item_id: String) -> Texture2D:
+	var icon_tex := get_tex("res://UI/03_cards/art/%s_icon.png" % item_id)
+	if icon_tex != null:
+		return icon_tex
+	return get_card_art(item_id)
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +286,15 @@ static func create_wood_button(
 		var sb_foc := StyleBoxEmpty.new()
 		btn.add_theme_stylebox_override("focus", sb_foc)
 
+	btn.mouse_entered.connect(func():
+		if not btn.disabled:
+			UIAssets.play_sfx("hover", 0.05)
+	)
+	btn.pressed.connect(func():
+		if not btn.get_meta("suppress_default_click_sfx", false):
+			UIAssets.play_sfx("click", 0.04)
+	)
+
 	return btn
 
 
@@ -408,24 +426,42 @@ const BGM_TRACKS := {
 	"fail":     {"path": "res://Music/last flashback raymaster (run fail ost).wav",      "db": -7.0},
 }
 
+# Genuine CC0 UI SFX by Kenney (https://kenney.nl — see UI/sfx/LICENSE_KENNEY_CC0.txt)
+const SFX_CLIPS := {
+	"hover":   {"path": "res://UI/sfx/ui_hover.wav",   "db": -14.0},
+	"click":   {"path": "res://UI/sfx/ui_click.wav",   "db": -6.0},
+	"buy":     {"path": "res://UI/sfx/ui_buy.ogg",     "db": -4.0},
+	"reroll":  {"path": "res://UI/sfx/ui_reroll.ogg",  "db": -4.0},
+	"stamp":   {"path": "res://UI/sfx/ui_stamp.ogg",   "db": -3.0},
+	"open":    {"path": "res://UI/sfx/ui_open.ogg",    "db": -6.0},
+	"close":   {"path": "res://UI/sfx/ui_close.ogg",   "db": -6.0},
+	"error":   {"path": "res://UI/sfx/ui_error.wav",   "db": -6.0},
+	"confirm": {"path": "res://UI/sfx/ui_confirm.wav", "db": -6.0},
+}
+
 
 static func get_music_manager() -> Node:
+	if is_instance_valid(_music_mgr) and not _music_mgr.is_queued_for_deletion():
+		return _music_mgr
 	var ml := Engine.get_main_loop()
 	if not (ml is SceneTree):
 		return null
 	var tree := ml as SceneTree
 	if tree.root == null:
 		return null
-	var mgr := tree.root.get_node_or_null("SlopMusicManager")
-	if mgr != null and is_instance_valid(mgr) and not mgr.is_queued_for_deletion():
-		return mgr
+	var existing := tree.root.get_node_or_null("SlopMusicManager")
+	if is_instance_valid(existing) and not existing.is_queued_for_deletion():
+		_music_mgr = existing
+		return _music_mgr
 	if tree.root.has_meta("_slop_music_mgr"):
 		var pending = tree.root.get_meta("_slop_music_mgr")
 		if pending is Node and is_instance_valid(pending) and not pending.is_queued_for_deletion():
-			return pending
+			_music_mgr = pending
+			return _music_mgr
 	load_and_apply_settings()
-	mgr = MusicController.new()
+	var mgr := MusicController.new()
 	mgr.name = "SlopMusicManager"
+	_music_mgr = mgr
 	tree.root.set_meta("_slop_music_mgr", mgr)
 	tree.root.call_deferred("add_child", mgr)
 	return mgr
@@ -443,6 +479,12 @@ static func play_bgm(track_key: String, fade_sec: float = 0.55) -> void:
 		mgr.play_track(track_key, fade_sec)
 
 
+static func play_sfx(sfx_key: String, pitch_jitter: float = 0.04) -> void:
+	var mgr := get_music_manager()
+	if mgr != null and mgr.has_method("play_sfx_clip"):
+		mgr.play_sfx_clip(sfx_key, pitch_jitter)
+
+
 class MusicController extends Node:
 	var _p_a: AudioStreamPlayer = null
 	var _p_b: AudioStreamPlayer = null
@@ -452,21 +494,61 @@ class MusicController extends Node:
 	var _fade_tween: Tween = null
 	var _duck_tween: Tween = null
 	var _stream_cache: Dictionary = {}
+	var _sfx_cache: Dictionary = {}
+	var _sfx_pool: Array[AudioStreamPlayer] = []
+	var _sfx_cursor: int = 0
 	var _poll_accum: float = 0.0
 
 	func _ready() -> void:
-		var root := get_tree().root if get_tree() != null else null
-		if root != null:
-			var existing := root.get_node_or_null("SlopMusicManager")
-			if existing != null and existing != self and is_instance_valid(existing) and not existing.is_queued_for_deletion():
+		# Belt-and-suspenders singleton guard: never allow duplicate MusicController nodes in tree
+		for n in get_tree().get_nodes_in_group("slop_music_manager"):
+			if n != self and is_instance_valid(n) and not n.is_queued_for_deletion():
 				queue_free()
 				return
+		add_to_group("slop_music_manager")
 		process_mode = Node.PROCESS_MODE_ALWAYS
 		UIAssets.load_and_apply_settings()
 		_p_a = _make_player("BGMChannelA")
 		_p_b = _make_player("BGMChannelB")
 		_active_player = _p_a
+		for i in range(4):
+			var sp := AudioStreamPlayer.new()
+			sp.name = "UISFX_%d" % i
+			sp.bus = "SFX"
+			sp.process_mode = Node.PROCESS_MODE_ALWAYS
+			add_child(sp)
+			_sfx_pool.append(sp)
 		call_deferred("_evaluate_and_apply")
+
+	func _exit_tree() -> void:
+		if UIAssets._music_mgr == self:
+			UIAssets._music_mgr = null
+
+	func _load_sfx(sfx_key: String) -> AudioStream:
+		if _sfx_cache.has(sfx_key):
+			return _sfx_cache[sfx_key]
+		if not UIAssets.SFX_CLIPS.has(sfx_key):
+			return null
+		var path: String = str(UIAssets.SFX_CLIPS[sfx_key]["path"])
+		if not ResourceLoader.exists(path):
+			return null
+		var stream := load(path) as AudioStream
+		if stream != null:
+			_sfx_cache[sfx_key] = stream
+		return stream
+
+	func play_sfx_clip(sfx_key: String, pitch_jitter: float = 0.04) -> void:
+		if _sfx_pool.is_empty():
+			return
+		var stream := _load_sfx(sfx_key)
+		if stream == null:
+			return
+		var sp: AudioStreamPlayer = _sfx_pool[_sfx_cursor % _sfx_pool.size()]
+		_sfx_cursor += 1
+		sp.stream = stream
+		sp.volume_db = float(UIAssets.SFX_CLIPS[sfx_key].get("db", -6.0))
+		sp.pitch_scale = 1.0 + randf_range(-pitch_jitter, pitch_jitter) if pitch_jitter > 0.0 else 1.0
+		sp.play()
 
 	func _make_player(n: String) -> AudioStreamPlayer:
 		var p := AudioStreamPlayer.new()
@@ -482,6 +564,11 @@ class MusicController extends Node:
 		return p
 
 	func _process(delta: float) -> void:
+		# Safety invariant: once any crossfade finishes, ensure ONLY _active_player can be playing
+		if _fade_tween == null or not _fade_tween.is_valid():
+			var inactive := _p_b if _active_player == _p_a else _p_a
+			if is_instance_valid(inactive) and inactive.playing:
+				inactive.stop()
 		_poll_accum += delta
 		if _poll_accum >= 0.15:
 			_poll_accum = 0.0
@@ -554,9 +641,11 @@ class MusicController extends Node:
 				target_track = "gameplay"
 				want_duck = _is_group_visible("pause_menu")
 
+		var duck_changed := (want_duck != _is_ducked)
 		if target_track != "" and target_track != _current_track:
+			_is_ducked = want_duck
 			play_track(target_track, 0.55)
-		if want_duck != _is_ducked:
+		elif duck_changed:
 			_set_ducked(want_duck)
 
 	func _load_stream(track_key: String) -> AudioStream:
@@ -573,7 +662,7 @@ class MusicController extends Node:
 		return stream
 
 	func play_track(track_key: String, fade_sec: float = 0.55) -> void:
-		if not is_inside_tree():
+		if not is_inside_tree() or not is_instance_valid(_p_a) or not is_instance_valid(_p_b):
 			return
 		if track_key == _current_track and _active_player != null and _active_player.playing:
 			return
@@ -590,29 +679,37 @@ class MusicController extends Node:
 		_active_player = incoming
 		_current_track = track_key
 
-		if _duck_tween != null and _duck_tween.is_valid():
-			_duck_tween.kill()
+		# Cancel any prior fade or duck tweens so two tweens never fight over volume_db
 		if _fade_tween != null and _fade_tween.is_valid():
 			_fade_tween.kill()
+		if _duck_tween != null and _duck_tween.is_valid():
+			_duck_tween.kill()
 
-		incoming.stream = stream
 		if fade_sec <= 0.0:
+			incoming.stop()
+			incoming.stream = stream
 			incoming.volume_db = target_db
 			incoming.play()
 			if outgoing != null and outgoing != incoming and outgoing.playing:
 				outgoing.stop()
 			return
 
-		incoming.volume_db = -42.0
-		incoming.play()
+		# If incoming is ALREADY playing this exact stream (rapid menu toggle back-and-forth),
+		# smoothly ramp it back up from its current position instead of restarting or stacking!
+		if incoming.stream != stream or not incoming.playing:
+			incoming.stop()
+			incoming.stream = stream
+			incoming.volume_db = -42.0
+			incoming.play()
 
 		_fade_tween = create_tween()
+		_fade_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
 		_fade_tween.set_parallel(true)
 		_fade_tween.tween_property(incoming, "volume_db", target_db, fade_sec)
 		if outgoing != null and outgoing != incoming and outgoing.playing:
 			_fade_tween.tween_property(outgoing, "volume_db", -45.0, fade_sec)
 			_fade_tween.chain().tween_callback(func():
-				if outgoing != _active_player:
+				if is_instance_valid(outgoing) and outgoing != _active_player:
 					outgoing.stop()
 			)
 
@@ -624,5 +721,7 @@ class MusicController extends Node:
 		var target_db: float = base_db - 6.0 if duck else base_db
 		if _duck_tween != null and _duck_tween.is_valid():
 			_duck_tween.kill()
+		# If a crossfade is currently running, let it finish cleanly or re-target active player volume
 		_duck_tween = create_tween()
+		_duck_tween.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
 		_duck_tween.tween_property(_active_player, "volume_db", target_db, 0.22)

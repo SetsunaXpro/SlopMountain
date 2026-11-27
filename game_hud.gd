@@ -52,12 +52,40 @@ func _ready() -> void:
 	_connect_to_systems()
 
 
+func _has_active_group_node(group_name: String) -> bool:
+	for n in get_tree().get_nodes_in_group(group_name):
+		if is_instance_valid(n) and not n.is_queued_for_deletion() and n.is_inside_tree():
+			if "visible" in n and not n.visible:
+				continue
+			return true
+	return false
+
+
+func _should_hide_hud(dnc: Node) -> bool:
+	if _has_active_group_node("title_screen"):
+		return true
+	if _has_active_group_node("buy_menu") or _has_active_group_node("machine_buy_menu") or _has_active_group_node("quota_menu"):
+		return true
+	if _has_active_group_node("pause_menu") or _has_active_group_node("ui_modal_popup"):
+		return true
+	if dnc and is_instance_valid(dnc):
+		if "_night_modal" in dnc and is_instance_valid(dnc._night_modal) and dnc._night_modal.visible:
+			return true
+		if "quota_menu" in dnc and is_instance_valid(dnc.quota_menu) and not dnc.quota_menu.is_queued_for_deletion() and dnc.quota_menu.visible:
+			return true
+	return false
+
+
 func _process(_delta: float) -> void:
+	var dnc := get_tree().get_first_node_in_group("day_night_cycle")
+	var should_show := not _should_hide_hud(dnc)
+	if visible != should_show:
+		visible = should_show
+
 	var player := get_tree().get_first_node_in_group("player")
 	if player:
 		_sync_perks_if_changed(player)
 
-	var dnc := get_tree().get_first_node_in_group("day_night_cycle")
 	if not dnc:
 		return
 
@@ -74,10 +102,15 @@ func _process(_delta: float) -> void:
 	if dnc.has_method("get_daily_progress_amount") and dnc.has_method("get_current_quota"):
 		cur = float(dnc.get_daily_progress_amount())
 		tgt = float(dnc.get_current_quota())
-		quota_passed = (cur >= tgt)
 		var unit: String = "SC"
-		if "quota_type" in dnc:
+		if dnc.has_method("get_quota_unit"):
+			unit = str(dnc.get_quota_unit())
+		elif "quota_type" in dnc:
 			unit = "KG" if dnc.quota_type == DayNightCycle.QuotaType.ITEM_COUNT else "SC"
+		if dnc.has_method("is_daily_quota_met"):
+			quota_passed = bool(dnc.is_daily_quota_met())
+		else:
+			quota_passed = (cur >= tgt)
 		update_quota(cur, tgt, unit)
 
 	var event_locked := false
@@ -199,8 +232,8 @@ func _create_haul_quota_panel() -> Control:
 	quota_val_label.bbcode_enabled = true
 	quota_val_label.scroll_active = false
 	quota_val_label.fit_content = false
-	quota_val_label.position = Vector2(108, 10)
-	quota_val_label.size = Vector2(134, 22)
+	quota_val_label.position = Vector2(100, 9)
+	quota_val_label.size = Vector2(142, 18)
 	quota_val_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	quota_val_label.add_theme_font_override("normal_font", UIAssets.get_font("mono"))
 	quota_val_label.add_theme_font_override("bold_font", UIAssets.get_font("black"))
@@ -208,8 +241,9 @@ func _create_haul_quota_panel() -> Control:
 	quota_val_label.add_theme_font_size_override("bold_font_size", 12)
 	container.add_child(quota_val_label)
 
+	# Exact baked inner track cutout in hud_quota_bg.png: x=22..240 (w=219), y=30..45 (h=16)
 	quota_progress_bar = TextureProgressBar.new()
-	quota_progress_bar.position = Vector2(22, 37)
+	quota_progress_bar.position = Vector2(22, 30)
 	quota_progress_bar.custom_minimum_size = Vector2(219, 16)
 	quota_progress_bar.size = Vector2(219, 16)
 	quota_progress_bar.nine_patch_stretch = false
@@ -263,6 +297,7 @@ func _create_time_banner() -> Control:
 func _create_end_day_button() -> Button:
 	var btn := Button.new()
 	btn.text = "Hold [N] End Day"
+	btn.focus_mode = Control.FOCUS_NONE
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	btn.add_theme_font_override("font", UIAssets.get_font("bold"))
 	btn.add_theme_font_size_override("font_size", 11)
@@ -585,11 +620,11 @@ func update_quota(current: float, target: float, unit: String = "SC") -> void:
 	quota_unit = unit
 
 	if is_instance_valid(quota_val_label):
-		var cur_int := int(current)
-		var max_int := int(target)
+		var cur_str := "%d" % int(roundf(current)) if is_equal_approx(current, roundf(current)) else "%.1f" % current
+		var max_int := int(roundf(target))
 		var cur_col := "#52E67A" if current >= target and target > 0.0 else "#F5AE24"
-		quota_val_label.text = "[right][color=%s][b]%03d[/b][/color] [color=#7A8290]/[/color] [color=#F2F4F8][b]%d[/b][/color] [color=#F5AE24]%s[/color][/right]" % [
-			cur_col, cur_int, max_int, unit
+		quota_val_label.text = "[right][color=%s][b]%s[/b][/color] [color=#7A8290]/[/color] [color=#F2F4F8][b]%d[/b][/color] [color=#F5AE24]%s[/color][/right]" % [
+			cur_col, cur_str, max_int, unit
 		]
 
 	if is_instance_valid(quota_progress_bar):
@@ -641,7 +676,11 @@ func equip_perk(slot_index: int, perk_id: String) -> void:
 
 func update_streak(count: int) -> void:
 	current_streak = count
-	current_mult = 1.0 + float(count) * 0.1
+	var per_item_mult := 0.1
+	var player := get_tree().get_first_node_in_group("player") if is_inside_tree() else null
+	if player and "extra_mult_per_item" in player:
+		per_item_mult += float(player.extra_mult_per_item)
+	current_mult = 1.0 + float(count) * per_item_mult
 	if is_instance_valid(streak_counter):
 		streak_counter.set_value(current_streak)
 	if is_instance_valid(mult_label):
@@ -717,12 +756,20 @@ func _refresh_inventory_from_player(player: Node) -> void:
 		if i < items.size():
 			var item_data: Dictionary = items[items.size() - 1 - i]
 			var id_str: String = str(item_data.get("id", "trash")).to_lower()
-			if id_str.contains("can") or id_str.contains("metal"):
+			if id_str.contains("compacted_metal"):
+				slot_widget.set_item(InventorySlotWidget.ItemType.METAL, "METAL+")
+			elif id_str.contains("compacted_plastic"):
+				slot_widget.set_item(InventorySlotWidget.ItemType.PLASTIC, "PLAST+")
+			elif id_str.contains("compost"):
+				slot_widget.set_item(InventorySlotWidget.ItemType.ORGANIC, "COMPOST")
+			elif id_str.contains("can") or id_str.contains("metal") or id_str.contains("kaleng") or id_str.contains("tin"):
 				slot_widget.set_item(InventorySlotWidget.ItemType.METAL, "METAL")
-			elif id_str.contains("bottle") or id_str.contains("glass"):
+			elif id_str.contains("bottle") or id_str.contains("glass") or id_str.contains("botol"):
 				slot_widget.set_item(InventorySlotWidget.ItemType.GLASS, "GLASS")
-			elif id_str.contains("plastic"):
+			elif id_str.contains("plastic") or id_str.contains("plastik"):
 				slot_widget.set_item(InventorySlotWidget.ItemType.PLASTIC, "PLASTIC")
+			elif id_str.contains("banana") or id_str.contains("pisang") or id_str.contains("organic") or id_str.contains("organik") or id_str.contains("apple") or id_str.contains("food"):
+				slot_widget.set_item(InventorySlotWidget.ItemType.ORGANIC, "ORGANIC")
 			else:
 				slot_widget.set_item(InventorySlotWidget.ItemType.OTHER, id_str.to_upper().substr(0, 7))
 		else:
@@ -773,7 +820,7 @@ class OdometerWidget extends Control:
 
 ## Bottom-Left Inventory Slot (#1 - #4) snapped cleanly inside hud_pack_caddy_bg.png cutout (57 x 85)
 class InventorySlotWidget extends Control:
-	enum ItemType { EMPTY, METAL, GLASS, PLASTIC, OTHER }
+	enum ItemType { EMPTY, METAL, GLASS, PLASTIC, ORGANIC, OTHER }
 
 	var slot_number: int = 1
 	var item_type: ItemType = ItemType.EMPTY
@@ -831,6 +878,10 @@ class InventorySlotWidget extends Control:
 				tint = Color(0.11, 0.19, 0.26, 0.92)
 				accent = Color(0.50, 0.80, 0.98)
 				icon_txt = "🧴"
+			ItemType.ORGANIC:
+				tint = Color(0.14, 0.24, 0.12, 0.92)
+				accent = Color(0.56, 0.92, 0.36)
+				icon_txt = "🌱" if label_text == "COMPOST" else "🍌"
 		if is_instance_valid(_fill_panel):
 			var sb := StyleBoxFlat.new()
 			sb.bg_color = tint
@@ -958,9 +1009,10 @@ class PerkSlotWidget extends Control:
 			_fill_panel.add_theme_stylebox_override("panel", sb)
 			_fill_panel.visible = true
 
-			var custom_art := UIAssets.get_card_art(perk_id)
+			var custom_art := UIAssets.get_perk_icon(perk_id)
 			if custom_art != null and is_instance_valid(_art_rect):
 				_art_rect.texture = custom_art
+				_art_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 				_art_rect.visible = true
 				if is_instance_valid(_icon_label):
 					_icon_label.visible = false

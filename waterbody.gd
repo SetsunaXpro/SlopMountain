@@ -123,22 +123,28 @@ func _process_floatables(delta: float) -> void:
 				if correction.length_squared() > 0.001:
 					body.apply_torque(correction * uprighting_torque)
 
-			# Water drag
-			body.linear_damp  = water_linear_drag
-			body.angular_damp = water_angular_drag
-			body.sleeping = false
-
+			# Save original damping BEFORE overwriting with water drag!
 			if not _body_saved.has(body):
 				_body_saved[body] = {
 					"linear_damp":  body.linear_damp,
 					"angular_damp": body.angular_damp
 				}
+
+			# Water drag
+			body.linear_damp  = water_linear_drag
+			body.angular_damp = water_angular_drag
+			body.sleeping = false
 		else:
 			if _body_saved.has(body):
 				var s = _body_saved[body]
 				body.linear_damp  = s["linear_damp"]
 				body.angular_damp = s["angular_damp"]
 				_body_saved.erase(body)
+
+	# Prune freed bodies to avoid stale dictionary references
+	for saved_body in _body_saved.keys():
+		if not is_instance_valid(saved_body):
+			_body_saved.erase(saved_body)
 
 # ---------------------------------------------------------------------------
 # Player (CharacterBody3D)

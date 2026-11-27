@@ -83,10 +83,6 @@ func _process(delta: float) -> void:
 	_check_player_proximity()
 	_update_prompt()
 
-	if _player_nearby and not _is_processing:
-		if InputMap.has_action(input_interact) and Input.is_action_just_pressed(input_interact):
-			_try_deposit_organic()
-
 	if _is_processing:
 		_process_timer += delta
 		if _process_timer >= process_duration:
@@ -107,6 +103,8 @@ func _check_player_proximity() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not _player_nearby or not is_instance_valid(_player_ref):
 		return
+	if _player_ref.has_method("is_any_menu_open") and _player_ref.is_any_menu_open():
+		return
 
 	var pressed := false
 	if InputMap.has_action(input_interact) and event.is_action_pressed(input_interact):
@@ -116,6 +114,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			pressed = true
 
 	if pressed:
+		get_viewport().set_input_as_handled()
 		_try_deposit_organic()
 
 

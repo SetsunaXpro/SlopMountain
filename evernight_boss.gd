@@ -128,14 +128,15 @@ func _process(delta: float) -> void:
 	if is_dead:
 		return
 
-	# Slowly face nearest player
+	# Slowly face nearest player (guarded against zero-distance looking_at error)
 	_player_ref = _get_nearest_player()
 	if is_instance_valid(_player_ref):
 		var target_look: Vector3 = _player_ref.global_position
 		target_look.y = global_position.y
-		var cur_trans := global_transform
-		var desired := cur_trans.looking_at(target_look, Vector3.UP)
-		global_transform = cur_trans.interpolate_with(desired, delta * 1.2)
+		if global_position.distance_squared_to(target_look) > 0.01:
+			var cur_trans := global_transform
+			var desired := cur_trans.looking_at(target_look, Vector3.UP)
+			global_transform = cur_trans.interpolate_with(desired, delta * 1.2)
 
 	# Periodic ground stomp shockwave
 	_attack_timer -= delta
@@ -165,6 +166,13 @@ func _perform_stomp() -> void:
 
 
 func _spawn_compacted_ammo_caches() -> void:
+	# Cap active ammo cubes so long boss fights never degrade FPS
+	var existing_ammo := 0
+	for n in get_tree().get_nodes_in_group("compacted"):
+		if is_instance_valid(n) and n.name.begins_with("CompactedAmmoCube"):
+			existing_ammo += 1
+	if existing_ammo >= 9:
+		return
 	# Spawns free ammunition boxes of compacted metal and plastic cubes around the outpost
 	var offsets := [
 		Vector3(-4.0, 0.5, 3.0),
@@ -293,12 +301,18 @@ func die() -> void:
 	_hp_label.modulate = Color(0.3, 1.0, 0.5)
 
 	# Award massive cash bounty
+	if not is_instance_valid(_player_ref):
+		_player_ref = _get_nearest_player()
 	if is_instance_valid(_player_ref) and "slop_credit" in _player_ref:
 		_player_ref.slop_credit += 35.0
+		if "daily_sc_earned" in _player_ref:
+			_player_ref.daily_sc_earned += 35.0
 		if _player_ref.has_signal("slop_credit_changed"):
 			_player_ref.slop_credit_changed.emit(_player_ref.slop_credit, 35.0)
 		if _player_ref.has_method("_show_feedback"):
 			_player_ref._show_feedback("🏆 VICTORY! Evernight Colossus defeated! (+$35 SC)")
+		if NetworkManager != null:
+			NetworkManager.broadcast_team_sc(35.0)
 
 	# Collapse animation
 	var tw := create_tween()

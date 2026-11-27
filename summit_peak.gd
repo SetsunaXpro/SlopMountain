@@ -162,13 +162,19 @@ func deactivate_expedition() -> void:
 		_visual_root.visible = false
 
 
-func _process(_delta: float) -> void:
-	if not is_expedition_active or is_flag_planted:
+func _unhandled_input(event: InputEvent) -> void:
+	if not is_expedition_active or not _player_nearby or is_flag_planted:
 		return
-	if _player_nearby:
-		var click_plant := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and Input.get_mouse_mode() == Input.MOUSE_MODE_CAPTURED
-		if Input.is_action_just_pressed("interact") or Input.is_key_pressed(KEY_E) or click_plant:
-			plant_flag()
+	if is_instance_valid(_player_ref) and _player_ref.has_method("is_any_menu_open") and _player_ref.is_any_menu_open():
+		return
+	var pressed := false
+	if InputMap.has_action("interact") and event.is_action_pressed("interact"):
+		pressed = true
+	elif event is InputEventKey and event.pressed and not event.echo and (event.keycode == KEY_E or event.physical_keycode == KEY_E):
+		pressed = true
+	if pressed:
+		get_viewport().set_input_as_handled()
+		plant_flag()
 
 
 func _on_trigger_body_entered(body: Node) -> void:
